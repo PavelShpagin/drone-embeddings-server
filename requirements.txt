@@ -8,8 +8,11 @@ Pillow>=9.0.0
 numpy>=1.21.0
 
 # Deep learning models
-torch>=2.0.0
-torchvision>=0.15.0
+# torch>=2.0.0
+# torchvision>=0.15.0
+
+torch==2.0.1+cpu --index-url https://download.pytorch.org/whl/cpu
+torchvision==0.15.2+cpu --index-url https://download.pytorch.org/whl/cpu
 
 # Google Earth Engine
 earthengine-api>=0.1.300
