@@ -7,9 +7,10 @@ uvicorn[standard]>=0.24.0
 Pillow>=9.0.0
 numpy>=1.21.0
 
-# Deep learning models
-torch>=2.0.0
-torchvision>=0.15.0
+# Deep learning models - CPU-only for AWS deployment (much smaller)
+--index-url https://download.pytorch.org/whl/cpu
+torch==2.0.1+cpu
+torchvision==0.15.2+cpu
 
 # Google Earth Engine
 earthengine-api>=0.1.300
