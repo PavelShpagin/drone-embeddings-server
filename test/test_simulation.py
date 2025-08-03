@@ -149,12 +149,8 @@ def main():
     args = parser.parse_args()
     
     if args.remote:
-        # Use environment variable or default AWS placeholder
-        import os
-        aws_dns = os.getenv("AWS_SERVER_DNS", "your-aws-instance.compute.amazonaws.com")
+        aws_dns = "ec2-16-171-238-14.eu-north-1.compute.amazonaws.com"
         server_url = f"http://{aws_dns}:{args.port}"
-        if aws_dns == "your-aws-instance.compute.amazonaws.com":
-            print("Note: Set AWS_SERVER_DNS environment variable or update server_url with your actual AWS DNS")
     else:
         server_url = f"http://localhost:{args.port}"
     

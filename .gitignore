@@ -28,6 +28,8 @@ ENV/
 env/
 .venv
 
+.env
+
 # Data and secrets
 data/maps/
 data/embeddings/
