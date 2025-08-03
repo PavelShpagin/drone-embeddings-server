@@ -22,7 +22,7 @@ sys.path.append(str(Path(__file__).parent / "src"))
 
 from models import (
     InitMapRequest, HealthResponse, SessionInfo, SessionsResponse, 
-    FetchGpsRequest, FetchGpsResponse
+    FetchGpsRequest, FetchGpsResponse, VisualizePathRequest, VisualizePathResponse
 )
 from server_core import SatelliteEmbeddingServer
 
@@ -117,6 +117,30 @@ async def http_fetch_gps(session_id: str = Form(...), image: UploadFile = File(.
     except Exception as e:
         raise HTTPException(status_code=400, detail={
             "success": False,
+            "error": str(e)
+        })
+
+@app.post("/visualize_path")
+async def http_visualize_path(request: VisualizePathRequest):
+    """HTTP endpoint for generating path visualization."""
+    try:
+        from src.visualize_map import process_path_visualization_request
+        result = process_path_visualization_request(request.session_id, server.sessions)
+        
+        if result["success"]:
+            from fastapi.responses import StreamingResponse
+            import io
+            return StreamingResponse(
+                io.BytesIO(result["image_bytes"]),
+                media_type="image/jpeg",
+                headers={"Content-Disposition": f"attachment; filename=path_{request.session_id[:8]}.jpg"}
+            )
+        else:
+            return VisualizePathResponse(**result)
+                
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={
+                "success": False,
             "error": str(e)
         })
 

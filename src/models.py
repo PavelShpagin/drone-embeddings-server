@@ -6,7 +6,7 @@ Contains all data structures and Pydantic models used by the server.
 
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pydantic import BaseModel
 
 
@@ -21,6 +21,18 @@ class PatchData:
 
 
 @dataclass
+class PathPoint:
+    """Single point in a GPS tracking path."""
+    lat: float
+    lng: float
+    timestamp: float
+    pos2D: Optional[Tuple[float, float]] = None
+    height: Optional[float] = None
+    image_data: Optional[bytes] = None
+    embedding: Optional[np.ndarray] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+@dataclass
 class SessionData:
     """Complete session data for a map region."""
     session_id: str
@@ -30,6 +42,8 @@ class SessionData:
     patches: List[PatchData]  # All patches with embeddings and GPS
     created_at: float
     meters_coverage: int
+    path_data: List[PathPoint] = field(default_factory=list)  # GPS tracking path data
+    path_image_file: Optional[str] = None  # Incremental path visualization image
 
 
 # Pydantic Models for API
@@ -71,4 +85,14 @@ class FetchGpsResponse(BaseModel):
     similarity: Optional[float] = None
     confidence: Optional[str] = None
     patch_coords: Optional[list] = None
+    error: Optional[str] = None
+
+class VisualizePathRequest(BaseModel):
+    session_id: str
+
+class VisualizePathResponse(BaseModel):
+    success: bool
+    session_id: Optional[str] = None
+    path_points: Optional[int] = None
+    message: Optional[str] = None
     error: Optional[str] = None

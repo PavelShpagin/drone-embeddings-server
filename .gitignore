@@ -29,9 +29,10 @@ env/
 .venv
 
 # Data and secrets
-data/gee_api/
 data/maps/
 data/embeddings/
+data/server_paths/
+data/client_paths/
 data/sessions.pkl
 secrets/
 *.pkl

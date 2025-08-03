@@ -60,11 +60,11 @@ python run_server.py --port 5000
 ### 4. Test Server
 
 ```bash
-# Test the API endpoints
-python test_server.py --server http://localhost:5000
+# Test device mode with data storage
+python test/test_fetch_gps_device.py
 
-# Or run test client directly
-python test/test_client_local.py --server http://localhost:5000
+# Test complete simulation with path visualization
+python test/test_simulation.py
 ```
 
 ## API Endpoints
@@ -175,45 +175,78 @@ List all active sessions.
 }
 ```
 
+#### `POST /fetch_gps`
+
+Find GPS coordinates from an input image by matching its DINOv2 embedding against session embeddings.
+
+**Request Body:** Form data with:
+
+- `session_id` (string): Session ID to search within
+- `image` (file): Image file to process
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "gps": {
+    "lat": 50.4162,
+    "lng": 30.8906
+  },
+  "similarity": 0.85,
+  "confidence": "high"
+}
+```
+
+#### `POST /visualize_path`
+
+Returns the stored path visualization image with incremental red dots and connecting lines.
+
+**Request Body:**
+
+```json
+{
+  "session_id": "uuid-string"
+}
+```
+
+**Response:** JPEG image with path visualization (updated incrementally by fetch_gps calls)
+
 ## Processing Pipeline
 
-1. **Image Acquisition**
+1. **Map Initialization** (`init_map`)
 
-   - Calculate optimal grid size for desired coverage
+   - Calculate minimal grid size for desired coverage
    - Fetch satellite imagery using GEE API (parallel downloads)
-   - Stitch tiles into seamless map
+   - Crop to exact meter coverage and extract 100 patches (10x10 grid)
+   - Generate 384-dimensional DINOv2 embeddings for each patch
+   - Store in `data/sessions.pkl` with GPS coordinates
 
-2. **Image Processing**
+2. **GPS Matching** (`fetch_gps`)
 
-   - Crop to exact meter coverage
-   - Extract 100x100 pixel patches (50m ground resolution)
-   - Handle small areas by resizing when needed
+   - Generate embedding for input image using DINOv2
+   - Find closest patch by cosine similarity
+   - Add new red dot to path visualization image (5x5 pixels minimum)
+   - Draw connecting line to previous point
+   - Update session data incrementally
 
-3. **Embedding Generation**
-
-   - Run DINOv2 model on each patch (224x224 input)
-   - Generate 384-dimensional embeddings using Facebook's `dinov2_vits14`
-   - Calculate GPS coordinates for each patch center
-
-4. **Session Storage**
-   - Store in hash table: `session_id → {map, patches, embeddings, gps}`
-   - Persistent storage in binary format (`data/sessions.pkl`)
-   - Each patch includes: embedding vector, lat/lng, image coordinates
+3. **Path Visualization** (`visualize_path`)
+   - Return stored path image from session data
+   - Image updated incrementally by each `fetch_gps` call
+   - Large red dots with white borders and connecting lines
 
 ## Data Storage Structure
 
-The test client saves data in organized directories:
+Clean separation between server and client data:
 
 ```
 data/
-├── maps/                           # Map images and metadata
-│   ├── map_lat_lng_device_timestamp.jpg
-│   └── map_lat_lng_device_timestamp_metadata.json
-├── embeddings/                     # Embedding data
-│   ├── map_lat_lng_device_timestamp_embeddings.json
-│   └── map_lat_lng_device_timestamp_embeddings.npy
-├── gee_api/                       # Downloaded satellite images
-└── server_api/                    # Legacy format (deprecated)
+├── maps/                           # Full satellite map images
+├── embeddings/                     # Patch embedding data (JSON)
+├── server_paths/                   # Server-side path visualization images
+├── client_paths/                   # Client-side received path images
+└── sessions.pkl                    # Persistent session storage (file paths only)
+    └── path_sessionid_timestamp.jpg
 ```
 
 ### Maps Directory
@@ -269,20 +302,26 @@ Example embedding JSON structure:
 ```
 server/
 ├── server.py              # Main FastAPI server
-├── run_server.py          # Server launcher
-├── test_server.py         # Test runner
-├── setup_models.sh        # Model setup script
+├── README.md              # Documentation (this file)
 ├── requirements.txt       # Dependencies
-├── Documentation.md       # This file
+├── secret.sh              # GEE credentials setup script
 ├── data/                  # Data storage
 │   ├── sessions.pkl       # Persistent session storage
-│   ├── maps/             # Map images and metadata
-│   ├── embeddings/       # Embedding data
-│   └── gee_api/          # Downloaded satellite images
-├── src/                  # Source code
-│   └── gee_sampler.py    # Google Earth Engine sampler
+│   ├── maps/             # Full satellite map images
+│   ├── embeddings/       # Embedding data and metadata
+│   └── paths/            # Path visualization images with red dots/lines
+├── src/                  # Source code modules
+│   ├── server_core.py    # Main server class
+│   ├── models.py         # Data structures and Pydantic models
+│   ├── embedder.py       # DINOv2 model wrapper
+│   ├── init_map.py       # Map initialization logic
+│   ├── fetch_gps.py      # GPS matching logic
+│   ├── visualize_map.py  # Path visualization
+│   ├── gee_sampler.py    # Google Earth Engine sampler
+│   └── image_metadata.py # Image metadata extraction
 ├── test/                 # Test scripts
-│   └── test_client_local.py  # HTTP test client
+│   ├── test_fetch_gps_device.py  # Test device mode with storage
+│   └── test_simulation.py        # Complete simulation test
 └── secrets/              # Credentials (create this)
     └── earth-engine-key.json
 ```
@@ -300,6 +339,23 @@ curl -X POST http://localhost:5000/init_map \
     "meters": 1000,
     "mode": "device"
   }'
+```
+
+### Find GPS from Image
+
+```bash
+curl -X POST http://localhost:5000/fetch_gps \
+  -F "session_id=your-session-id" \
+  -F "image=@/path/to/your/image.jpg"
+```
+
+### Generate Path Visualization
+
+```bash
+curl -X POST http://localhost:5000/visualize_path \
+  -H "Content-Type: application/json" \
+  -d '{"session_id": "your-session-id"}' \
+  --output path_visualization.jpg
 ```
 
 ### Check Server Health

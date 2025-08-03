@@ -181,9 +181,8 @@ class GEESampler:
         lat: float,
         lng: float,
         grid_size: Tuple[int, int] = (4, 4),
-        patch_pixels: Tuple[int, int] = (128, 128),
-        save_path: Optional[str] = None
-    ) -> Path:
+        patch_pixels: Tuple[int, int] = (128, 128)
+    ) -> Image.Image:
         """
         Sample a satellite image with specified grid and patch dimensions.
         
@@ -266,29 +265,18 @@ class GEESampler:
                 paste_y = row * patch_height
                 final_image.paste(tiles[tile_index], (paste_x, paste_y))
         
-        # Save image
-        if save_path is None:
-            filename = f"gee_sample_{lat:.6f}_{lng:.6f}_{rows}x{cols}_{int(total_coverage_m)}m.jpg"
-            save_path = Path("data/gee_api") / filename
-        else:
-            save_path = Path(save_path)
+        # Return image directly without saving
+        print(f"Image ready: {final_image.size}")
         
-        save_path.parent.mkdir(parents=True, exist_ok=True)
-        final_image.save(save_path, 'JPEG', quality=95)
-        
-        print(f"Image saved: {save_path}")
-        print(f"Final size: {final_image.size} | File: {save_path.stat().st_size / 1024:.0f} KB")
-        
-        return save_path
+        return final_image
 
 # Convenience function for direct usage
 def sample_satellite_image(
     lat: float,
     lng: float,
     grid_size: Tuple[int, int] = (4, 4),
-    patch_pixels: Tuple[int, int] = (128, 128),
-    save_path: Optional[str] = None
-) -> Path:
+    patch_pixels: Tuple[int, int] = (128, 128)
+) -> Image.Image:
     """
     Convenience function to sample satellite imagery without class instantiation.
     
@@ -297,10 +285,9 @@ def sample_satellite_image(
         lng: Longitude of center point  
         grid_size: (rows, cols) for the grid
         patch_pixels: (height, width) of each patch in pixels
-        save_path: Optional custom save path
         
     Returns:
-        Path to the saved image
+        PIL Image object
     """
     sampler = GEESampler()
-    return sampler.sample_image(lat, lng, grid_size, patch_pixels, save_path)
+    return sampler.sample_image(lat, lng, grid_size, patch_pixels)

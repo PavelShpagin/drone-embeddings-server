@@ -15,13 +15,18 @@ from gee_sampler import sample_satellite_image
 
 
 def calculate_grid_size_for_meters(meters: int) -> Tuple[int, int]:
-    """Calculate grid size to get good patch resolution."""
-    # Target: ~1-2 meters per pixel for good resolution
-    # Each GEE patch is 256px at ~10m/pixel = 2560m coverage
-    # For 1000m desired, use 2x2 grid (5120m) for better resolution
-    if meters <= 1000:
-        return (2, 2)  # 5120m coverage, better resolution
-    elif meters <= 2000:
+    """Calculate minimal grid size needed for coverage."""
+    # Each GEE patch is 256px at 10m/pixel = 2560m coverage
+    TILE_COVERAGE_M = 256 * 10  # 2560m per tile
+    
+    # Calculate minimum tiles needed
+    tiles_needed = math.ceil(meters / TILE_COVERAGE_M)
+    
+    if tiles_needed <= 1:
+        return (1, 1)  # 2560m coverage
+    elif tiles_needed <= 4:
+        return (2, 2)  # 5120m coverage  
+    elif tiles_needed <= 9:
         return (3, 3)  # 7680m coverage
     else:
         return (4, 4)  # 10240m coverage
@@ -69,13 +74,8 @@ def extract_patches(image: np.ndarray, patch_size: int = 100) -> List[Tuple[np.n
     h, w = image.shape[:2]
     patches = []
     
-    # Always extract multiple patches, even from small images
-    # Calculate stride to get good coverage
-    if h < 200 or w < 200:
-        # For small images, use overlapping patches
-        stride = patch_size // 2
-    else:
-        stride = patch_size
+    # Use non-overlapping patches for clean grid
+    stride = patch_size
     
     for y in range(0, max(1, h - patch_size + 1), stride):
         for x in range(0, max(1, w - patch_size + 1), stride):
@@ -159,15 +159,14 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
         
         # Fetch satellite image using GEE sampler
         print("Fetching satellite imagery...")
-        image_path = sample_satellite_image(
+        pil_image = sample_satellite_image(
             lat=lat,
             lng=lng,
             grid_size=(grid_rows, grid_cols),
             patch_pixels=(256, 256)  # High resolution patches
         )
         
-        # Load and convert to numpy array
-        pil_image = Image.open(image_path)
+        # Convert to numpy array
         full_image = np.array(pil_image)
         
         # Calculate actual coverage achieved  
