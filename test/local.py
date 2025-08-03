@@ -174,6 +174,39 @@ def test_list_sessions(server_url):
             "error": f"Request failed: {str(e)}"
         }
 
+def test_fetch_gps(server_url, session_id, image_path):
+    """Test the fetch_gps endpoint."""
+    print(f"Testing fetch_gps with session {session_id[:8]}...")
+    
+    url = f"{server_url}/fetch_gps"
+    
+    try:
+        # Prepare the request for FastAPI
+        with open(image_path, 'rb') as img_file:
+            files = {'image': (image_path, img_file, 'image/jpeg')}
+            data = {'session_id': session_id}
+            
+            response = requests.post(url, files=files, data=data, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result["success"]:
+                gps = result["gps"]
+                print(f"Found GPS: {gps['lat']:.6f}, {gps['lng']:.6f}")
+                print(f"Similarity: {result['similarity']:.3f}")
+                print(f"Confidence: {result['confidence']}")
+                return result
+            else:
+                print(f"Error: {result['error']}")
+                return None
+        else:
+            print(f"HTTP Error: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        print(f"Request failed: {str(e)}")
+        return None
+
 def test_both_modes_http(server_url="http://localhost:5000"):
     """Test both server and device modes via HTTP."""
     print("Testing Satellite Embedding Server - HTTP Mode")
@@ -254,9 +287,39 @@ def test_both_modes_http(server_url="http://localhost:5000"):
         "time": device_time
     }
     
-    # Test 3: LIST SESSIONS
+    # Test 3: FETCH GPS
     print("\n" + "="*60)
-    print("TEST 3: LIST SESSIONS (HTTP)")
+    print("TEST 3: FETCH GPS (HTTP)")
+    print("="*60)
+    
+    if result_device and result_device.get("success") and "map_data" in result_device:
+        session_id = result_device["session_id"]
+        # Use a test image for GPS fetch test
+        test_image = "../real_data/00204144.jpg"  # Use available test image
+        
+        import os
+        if os.path.exists(test_image):
+            
+            start_time = time.time()
+            gps_result = test_fetch_gps(server_url, session_id, test_image)
+            gps_time = time.time() - start_time
+            
+            if gps_result and gps_result.get("success"):
+                print(f"GPS fetch result (took {gps_time:.2f}s):")
+                print(f"  - Found location: {gps_result['gps']['lat']:.6f}, {gps_result['gps']['lng']:.6f}")
+                print(f"  - Similarity: {gps_result['similarity']:.3f}")
+                print(f"  - Confidence: {gps_result['confidence']}")
+            else:
+                print(f"GPS fetch failed: {gps_result.get('error', 'Unknown error') if gps_result else 'No result'}")
+        else:
+            print(f"Test image not found: {test_image}")
+            print("Skipping GPS fetch test - no test image available")
+    else:
+        print("Skipping GPS fetch test - no valid device mode session")
+    
+    # Test 4: LIST SESSIONS
+    print("\n" + "="*60)
+    print("TEST 4: LIST SESSIONS (HTTP)")
     print("="*60)
     
     sessions_result = test_list_sessions(server_url)
