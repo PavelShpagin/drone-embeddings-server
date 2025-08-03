@@ -68,6 +68,11 @@ python test/test_fetch_gps_device.py
 
 # Test complete simulation with path visualization
 python test/test_simulation.py
+
+# Test against remote AWS server
+export AWS_SERVER_DNS="your-ec2-instance.compute.amazonaws.com"
+python test/test_fetch_gps_device.py --remote --port 5000
+python test/test_simulation.py --remote --port 5000
 ```
 
 ## API Endpoints
@@ -265,11 +270,13 @@ data/
 ### Path Visualization Directories
 
 **Server Paths (`data/server_paths/`)**:
+
 - Path visualization images maintained by server
 - Updated incrementally with each `fetch_gps` call
 - Red dots connected by thin red lines
 
-**Client Paths (`data/client_paths/`)**:  
+**Client Paths (`data/client_paths/`)**:
+
 - Path images received by test clients
 - Stored when calling `visualize_path` endpoint
 - Clean separation from server-side storage
@@ -363,6 +370,22 @@ curl -X POST http://localhost:5000/init_map \
 curl -X POST http://localhost:5000/fetch_gps \
   -F "session_id=your-session-id" \
   -F "image=@/path/to/your/image.jpg"
+```
+
+### Test Against Remote AWS Server
+
+```bash
+# Set your AWS instance DNS
+export AWS_SERVER_DNS="ec2-12-34-56-78.compute-1.amazonaws.com"
+
+# Test device mode against AWS
+python test/test_fetch_gps_device.py --remote
+
+# Test simulation against AWS
+python test/test_simulation.py --remote
+
+# Use custom port
+python test/test_fetch_gps_device.py --remote --port 8080
 ```
 
 ### Generate Path Visualization

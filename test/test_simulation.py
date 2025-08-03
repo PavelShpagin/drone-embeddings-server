@@ -12,12 +12,11 @@ import time
 from pathlib import Path
 
 
-def test_simulation():
+def test_simulation(server_url):
     """Test complete simulation with device mode and path visualization."""
-    server_url = "http://localhost:5000"
-    
     print("Testing Complete Simulation")
     print("=" * 40)
+    print(f"Server URL: {server_url}")
     
     # Initialize map in device mode
     payload = {
@@ -138,5 +137,29 @@ def test_simulation():
     return True
 
 
+def main():
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Test complete simulation with path visualization")
+    parser.add_argument("--remote", action="store_true", 
+                       help="Test against remote AWS server instead of localhost")
+    parser.add_argument("--port", type=int, default=5000,
+                       help="Port number (default: 5000)")
+    
+    args = parser.parse_args()
+    
+    if args.remote:
+        # Use environment variable or default AWS placeholder
+        import os
+        aws_dns = os.getenv("AWS_SERVER_DNS", "your-aws-instance.compute.amazonaws.com")
+        server_url = f"http://{aws_dns}:{args.port}"
+        if aws_dns == "your-aws-instance.compute.amazonaws.com":
+            print("Note: Set AWS_SERVER_DNS environment variable or update server_url with your actual AWS DNS")
+    else:
+        server_url = f"http://localhost:{args.port}"
+    
+    test_simulation(server_url)
+
+
 if __name__ == "__main__":
-    test_simulation()
+    main()
