@@ -40,6 +40,15 @@ class SatelliteEmbeddingServer:
                 print("Starting fresh")
         except Exception as e:
             print(f"Error loading sessions: {e}, starting fresh")
+            # Remove the incompatible pickle file (sessions are not critical)
+            if os.path.exists(self.storage_file):
+                backup_file = self.storage_file + '.backup'
+                try:
+                    os.rename(self.storage_file, backup_file)
+                    print(f"Moved incompatible sessions to {backup_file}")
+                except:
+                    os.remove(self.storage_file)
+                    print("Removed incompatible sessions file")
             self.sessions = {}
     
     def _save_sessions(self):

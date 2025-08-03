@@ -66,9 +66,9 @@ class FetchGpsRequest(BaseModel):
 
 class FetchGpsResponse(BaseModel):
     success: bool
-    session_id: str = None
-    gps: dict = None
-    similarity: float = None
-    confidence: str = None
-    patch_coords: list = None
-    error: str = None
+    session_id: Optional[str] = None
+    gps: Optional[dict] = None
+    similarity: Optional[float] = None
+    confidence: Optional[str] = None
+    patch_coords: Optional[list] = None
+    error: Optional[str] = None

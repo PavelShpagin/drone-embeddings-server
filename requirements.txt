@@ -8,9 +8,9 @@ pydantic>=1.10.0,<3.0.0
 Pillow>=9.0.0,<11.0.0
 numpy>=1.21.0,<2.0.0
 
-# Deep learning models - CPU-only for AWS deployment  
-# torch>=1.13.0,<2.1.0
-# torchvision>=0.14.0,<0.16.0
+# Deep learning models - CPU-only for AWS deployment
+torch>=1.13.0,<2.1.0
+torchvision>=0.14.0,<0.16.0
 
 # Google Earth Engine
 earthengine-api>=0.1.300
@@ -21,6 +21,11 @@ retry>=0.9.2
 
 # Additional dependencies for compatibility
 typing-extensions>=4.0.0
+python-multipart>=0.0.9
+
+# For better Pydantic compatibility with older Python
+pydantic-core>=2.10.0,<2.35.0
+
 # Data serialization - pickle is built-in for Python 3.8+
 # pickle5>=0.0.12; python_version < "3.8"
 
