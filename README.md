@@ -32,11 +32,11 @@ Server for processing satellite imagery with DINOv2 embeddings. Fetches high-res
 ### 1. Setup Models and Dependencies
 
 ```bash
-# Install dependencies and setup DINOv2 model
-./setup_models.sh
-
-# Or manually install dependencies
+# Install dependencies
 pip install -r requirements.txt
+
+# Install PyTorch CPU-only (for production)
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 ```
 
 ### 2. Setup Google Earth Engine Credentials
@@ -47,14 +47,17 @@ Place your service account key at:
 secrets/earth-engine-key.json
 ```
 
+Or use the setup script:
+
+```bash
+./secret.sh
+```
+
 ### 3. Start Server
 
 ```bash
-# Using the main server file
+# Start the server
 python server.py --port 5000
-
-# Or using the launcher script
-python run_server.py --port 5000
 ```
 
 ### 4. Test Server
@@ -210,7 +213,7 @@ Returns the stored path visualization image with incremental red dots and connec
 }
 ```
 
-**Response:** JPEG image with path visualization (updated incrementally by fetch_gps calls)
+**Response:** JPEG image with path visualization showing red dots connected by thin red lines (updated incrementally by fetch_gps calls)
 
 ## Processing Pipeline
 
@@ -227,13 +230,14 @@ Returns the stored path visualization image with incremental red dots and connec
    - Generate embedding for input image using DINOv2
    - Find closest patch by cosine similarity
    - Add new red dot to path visualization image (5x5 pixels minimum)
-   - Draw connecting line to previous point
+   - Draw thin red connecting line to previous point (if exists)
+   - Store path image file in `data/server_paths/`
    - Update session data incrementally
 
 3. **Path Visualization** (`visualize_path`)
    - Return stored path image from session data
    - Image updated incrementally by each `fetch_gps` call
-   - Large red dots with white borders and connecting lines
+   - Large red dots with thin red connecting lines (no borders)
 
 ## Data Storage Structure
 
@@ -246,7 +250,6 @@ data/
 ├── server_paths/                   # Server-side path visualization images
 ├── client_paths/                   # Client-side received path images
 └── sessions.pkl                    # Persistent session storage (file paths only)
-    └── path_sessionid_timestamp.jpg
 ```
 
 ### Maps Directory
@@ -258,6 +261,18 @@ data/
 
 - **JSON**: Structured data with GPS coordinates, embeddings, and statistics
 - **NPY**: NumPy arrays for efficient loading in Python
+
+### Path Visualization Directories
+
+**Server Paths (`data/server_paths/`)**:
+- Path visualization images maintained by server
+- Updated incrementally with each `fetch_gps` call
+- Red dots connected by thin red lines
+
+**Client Paths (`data/client_paths/`)**:  
+- Path images received by test clients
+- Stored when calling `visualize_path` endpoint
+- Clean separation from server-side storage
 
 Example embedding JSON structure:
 
@@ -306,10 +321,11 @@ server/
 ├── requirements.txt       # Dependencies
 ├── secret.sh              # GEE credentials setup script
 ├── data/                  # Data storage
-│   ├── sessions.pkl       # Persistent session storage
+│   ├── sessions.pkl       # Persistent session storage (file paths only)
 │   ├── maps/             # Full satellite map images
 │   ├── embeddings/       # Embedding data and metadata
-│   └── paths/            # Path visualization images with red dots/lines
+│   ├── server_paths/     # Server-side path visualization images
+│   └── client_paths/     # Client-side received path images
 ├── src/                  # Source code modules
 │   ├── server_core.py    # Main server class
 │   ├── models.py         # Data structures and Pydantic models
@@ -426,7 +442,7 @@ The server includes comprehensive error handling:
 
    - Check internet connection for model download
    - Verify PyTorch installation: `python -c "import torch; print(torch.__version__)"`
-   - Clear cache: `./setup_models.sh clean`
+   - Restart server and check DINOv2 loading
 
 2. **GEE authentication fails**
 
@@ -442,5 +458,4 @@ The server includes comprehensive error handling:
 For additional support:
 
 - Check `/docs` endpoint for interactive API documentation
-- Review logs for detailed error messages
-- Test with `./setup_models.sh test` to verify model loading
+- Review server logs for detailed error messages
