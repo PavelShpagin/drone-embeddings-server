@@ -1,12 +1,12 @@
-# Satellite Embedding Server
+# Drone Embeddings Server
 
-FastAPI server for processing satellite imagery with DINOv2 embeddings.
+Real-time GPS localization server using DINOv2 embeddings and satellite imagery.
 
 ## Overview
 
-Server for processing satellite imagery with DINOv2 embeddings. Fetches high-resolution satellite imagery, extracts patches, generates embeddings using Facebook's DINOv2 model, and provides GPS-tagged data.
+The server provides GPS localization by matching drone camera images against pre-computed satellite image embeddings. The system supports both standalone server mode and device integration.
 
-## Architecture
+## Architecture Diagram
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
@@ -27,458 +27,251 @@ Server for processing satellite imagery with DINOv2 embeddings. Fetches high-res
                        └──────────────────┘
 ```
 
-## Quick Start
+## Architecture
 
-### 1. Setup Models and Dependencies
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Install PyTorch CPU-only (for production)
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-```
-
-### 2. Setup Google Earth Engine Credentials
-
-Place your service account key at:
+### Code Organization
 
 ```
-secrets/earth-engine-key.json
+server/
+├── server.py               # Main FastAPI application
+├── src/
+│   ├── general/           # Shared modules (used by both server and device)
+│   │   ├── models.py      # Data structures and Pydantic models
+│   │   ├── fetch_gps.py   # GPS coordinate matching logic
+│   │   ├── visualize_map.py # Path visualization
+│   │   └── image_metadata.py # Image processing utilities
+│   └── server/            # Server-specific modules
+│       ├── server_core.py # Main server logic and session management
+│       ├── init_map.py    # Map initialization and patch extraction
+│       ├── gee_sampler.py # Google Earth Engine interface
+│       └── embedder.py    # DINOv2 embedding model
+├── data/                  # Data storage
+│   ├── maps/             # Full satellite maps (session_id.pkl)
+│   ├── embeddings/       # Patch embeddings (session_id.json)
+│   ├── server_paths/     # Server-generated path visualizations
+│   ├── client_paths/     # Client-downloaded path images
+│   └── sessions.pkl      # Session metadata and path tracking
+└── test/                 # Testing scripts
+    ├── test_fetch_gps_device.py
+    └── test_simulation.py
 ```
 
-Or use the setup script:
+### Device Integration
 
-```bash
-./secret.sh
 ```
-
-### 3. Start Server
-
-```bash
-# Start the server
-python server.py --port 5000
-```
-
-### 4. Test Server
-
-```bash
-# Test device mode with data storage
-python test/test_fetch_gps_device.py
-
-# Test complete simulation with path visualization
-python test/test_simulation.py
-
-# Test against remote AWS server
-export AWS_SERVER_DNS="your-ec2-instance.compute.amazonaws.com"
-python test/test_fetch_gps_device.py --remote --port 5000
-python test/test_simulation.py --remote --port 5000
+device/
+├── localizer.py          # TCP adapter for device-server communication
+├── reader.cpp            # C++ image processing client
+├── src/                  # Shared code (copied from server/src)
+│   ├── general/          # Same as server/src/general
+│   ├── server/           # Copy of server modules for embedder access
+│   └── device/           # Device-specific modules
+│       └── init_map_wrapper.py # HTTP client for server init_map
+└── data/                 # Local device storage (same structure as server)
 ```
 
 ## API Endpoints
 
-### FastAPI Features
+### `/init_map` (POST)
 
-- **Interactive API Documentation**: `GET /docs` (Swagger UI)
-- **Alternative API Docs**: `GET /redoc` (ReDoc)
-- **OpenAPI Schema**: `GET /openapi.json`
+Initialize a new mapping session with satellite imagery.
 
-### Core Endpoints
-
-#### `GET /health`
-
-Health check endpoint.
-
-**Response:**
-
-```json
-{
-  "status": "healthy",
-  "sessions_count": 2,
-  "server": "Satellite Embedding Server"
-}
-```
-
-#### `POST /init_map`
-
-Initialize a new map session with satellite imagery and DINOv2 embeddings.
-
-**Request Body:**
+**Request:**
 
 ```json
 {
   "lat": 50.4162,
   "lng": 30.8906,
   "meters": 1000,
-  "mode": "device"
+  "mode": "server" // or "device" for full data return
 }
 ```
 
-**Parameters:**
-
-- `lat` (float): Latitude of center point
-- `lng` (float): Longitude of center point
-- `meters` (int): Coverage area in meters (default: 2000m = 2km)
-- `mode` (str): "server" or "device"
-
-**Response (Server Mode):**
+**Response:**
 
 ```json
 {
-  "session_id": "uuid-string",
   "success": true,
-  "message": "Map session created with N patches",
-  "coverage": "1000m x 1000m",
-  "patch_count": 4
+  "session_id": "74e654e3-79f3-46f0-aefc-0eaae66ea08e",
+  "created_at": "2025-08-07T04:13:27.123456",
+  "meters_coverage": 1000,
+  "patches": 100,
+  "map_bounds": {...}
 }
 ```
 
-**Response (Device Mode):**
+### `/fetch_gps` (POST)
+
+Find GPS coordinates from drone image.
+
+**Request:** Multipart form with `session_id` and `image` file.
+
+**Response:**
 
 ```json
 {
-  "session_id": "uuid-string",
   "success": true,
-  "map_data": {
-    "full_map": [...],  // Complete image as nested arrays
-    "map_bounds": {
-      "min_lat": 50.4117,
-      "max_lat": 50.4207,
-      "min_lng": 30.8836,
-      "max_lng": 30.8976
-    },
-    "patches": [
-      {
-        "embedding": [...],  // 384-dimensional DINOv2 embedding
-        "lat": 50.4162,
-        "lng": 30.8906,
-        "coords": [0, 0, 100, 100]  // Image coordinates [x1,y1,x2,y2]
-      }
-    ],
-    "meters_coverage": 1000,
-    "patch_count": 4
-  }
+  "session_id": "...",
+  "gps": { "lat": 50.414851, "lng": 30.884261 },
+  "similarity": 0.8234,
+  "confidence": "high",
+  "patch_coords": [10, 20, 20, 30]
 }
 ```
 
-#### `GET /sessions`
+### `/visualize_path` (POST)
+
+Get path visualization with GPS tracking.
+
+**Request:**
+
+```json
+{
+  "session_id": "74e654e3-79f3-46f0-aefc-0eaae66ea08e"
+}
+```
+
+**Response:** JPEG image bytes with red dots and connecting lines.
+
+### `/sessions` (GET)
 
 List all active sessions.
 
-**Response:**
+### `/health` (GET)
 
-```json
-{
-  "success": true,
-  "sessions": [
-    {
-      "session_id": "uuid-string",
-      "created_at": 1654123456.789,
-      "meters_coverage": 1000,
-      "patch_count": 4,
-      "map_bounds": {...}
-    }
-  ],
-  "count": 1
-}
-```
+Server health check.
 
-#### `POST /fetch_gps`
+## Setup
 
-Find GPS coordinates from an input image by matching its DINOv2 embedding against session embeddings.
+### Prerequisites
 
-**Request Body:** Form data with:
+- Python 3.8+
+- CUDA-capable GPU (recommended)
+- Google Earth Engine account
 
-- `session_id` (string): Session ID to search within
-- `image` (file): Image file to process
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "gps": {
-    "lat": 50.4162,
-    "lng": 30.8906
-  },
-  "similarity": 0.85,
-  "confidence": "high"
-}
-```
-
-#### `POST /visualize_path`
-
-Returns the stored path visualization image with incremental red dots and connecting lines.
-
-**Request Body:**
-
-```json
-{
-  "session_id": "uuid-string"
-}
-```
-
-**Response:** JPEG image with path visualization showing red dots connected by thin red lines (updated incrementally by fetch_gps calls)
-
-## Processing Pipeline
-
-1. **Map Initialization** (`init_map`)
-
-   - Calculate minimal grid size for desired coverage
-   - Fetch satellite imagery using GEE API (parallel downloads)
-   - Crop to exact meter coverage and extract 100 patches (10x10 grid)
-   - Generate 384-dimensional DINOv2 embeddings for each patch
-   - Store in `data/sessions.pkl` with GPS coordinates
-
-2. **GPS Matching** (`fetch_gps`)
-
-   - Generate embedding for input image using DINOv2
-   - Find closest patch by cosine similarity
-   - Add new red dot to path visualization image (5x5 pixels minimum)
-   - Draw thin red connecting line to previous point (if exists)
-   - Store path image file in `data/server_paths/`
-   - Update session data incrementally
-
-3. **Path Visualization** (`visualize_path`)
-   - Return stored path image from session data
-   - Image updated incrementally by each `fetch_gps` call
-   - Large red dots with thin red connecting lines (no borders)
-
-## Data Storage Structure
-
-Clean separation between server and client data:
-
-```
-data/
-├── maps/                           # Full satellite map images
-├── embeddings/                     # Patch embedding data (JSON)
-├── server_paths/                   # Server-side path visualization images
-├── client_paths/                   # Client-side received path images
-└── sessions.pkl                    # Persistent session storage (file paths only)
-```
-
-### Maps Directory
-
-- **Images**: High-quality JPEG satellite maps
-- **Metadata**: JSON with GPS bounds, coverage, patch counts
-
-### Embeddings Directory
-
-- **JSON**: Structured data with GPS coordinates, embeddings, and statistics
-- **NPY**: NumPy arrays for efficient loading in Python
-
-### Path Visualization Directories
-
-**Server Paths (`data/server_paths/`)**:
-
-- Path visualization images maintained by server
-- Updated incrementally with each `fetch_gps` call
-- Red dots connected by thin red lines
-
-**Client Paths (`data/client_paths/`)**:
-
-- Path images received by test clients
-- Stored when calling `visualize_path` endpoint
-- Clean separation from server-side storage
-
-Example embedding JSON structure:
-
-```json
-{
-  "session_id": "uuid",
-  "location": {"lat": 50.4162, "lng": 30.8906},
-  "embedding_info": {
-    "total_patches": 4,
-    "embedding_dimension": 384,
-    "map_bounds": {...}
-  },
-  "patches": [
-    {
-      "patch_id": 0,
-      "gps_coordinates": {"lat": 50.4162, "lng": 30.8906},
-      "image_coordinates": {"x1": 0, "y1": 0, "x2": 100, "y2": 100},
-      "embedding": [...],  // 384 float values
-      "embedding_stats": {
-        "min": -2.1,
-        "max": 3.4,
-        "mean": 0.12,
-        "std": 0.67,
-        "norm": 15.8
-      }
-    }
-  ]
-}
-```
-
-## DINOv2 Model Details
-
-- **Model**: Facebook Research DINOv2-ViT-Small (`dinov2_vits14`)
-- **Input Size**: 224×224 RGB images
-- **Output**: 384-dimensional embeddings
-- **Preprocessing**: ImageNet normalization + resize
-- **Fallback**: Random embeddings if model fails to load
-- **Device**: Automatic CUDA/CPU detection
-
-## Directory Structure
-
-```
-server/
-├── server.py              # Main FastAPI server
-├── README.md              # Documentation (this file)
-├── requirements.txt       # Dependencies
-├── secret.sh              # GEE credentials setup script
-├── data/                  # Data storage
-│   ├── sessions.pkl       # Persistent session storage (file paths only)
-│   ├── maps/             # Full satellite map images
-│   ├── embeddings/       # Embedding data and metadata
-│   ├── server_paths/     # Server-side path visualization images
-│   └── client_paths/     # Client-side received path images
-├── src/                  # Source code modules
-│   ├── server_core.py    # Main server class
-│   ├── models.py         # Data structures and Pydantic models
-│   ├── embedder.py       # DINOv2 model wrapper
-│   ├── init_map.py       # Map initialization logic
-│   ├── fetch_gps.py      # GPS matching logic
-│   ├── visualize_map.py  # Path visualization
-│   ├── gee_sampler.py    # Google Earth Engine sampler
-│   └── image_metadata.py # Image metadata extraction
-├── test/                 # Test scripts
-│   ├── test_fetch_gps_device.py  # Test device mode with storage
-│   └── test_simulation.py        # Complete simulation test
-└── secrets/              # Credentials (create this)
-    └── earth-engine-key.json
-```
-
-## Usage Examples
-
-### Initialize a Map Session
+### Installation
 
 ```bash
-curl -X POST http://localhost:5000/init_map \
-  -H "Content-Type: application/json" \
-  -d '{
-    "lat": 50.4162,
-    "lng": 30.8906,
-    "meters": 1000,
-    "mode": "device"
-  }'
+# Install dependencies
+pip install -r requirements.txt
+
+# Install PyTorch CPU version (if no GPU)
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# Set up Google Earth Engine credentials
+source secrets/secret.sh  # Contains GEE service account key
 ```
 
-### Find GPS from Image
+### Running the Server
 
 ```bash
-curl -X POST http://localhost:5000/fetch_gps \
-  -F "session_id=your-session-id" \
-  -F "image=@/path/to/your/image.jpg"
+# From project root
+python server/server.py --port 5000 --debug
+
+# Or with specific host
+python server/server.py --host 0.0.0.0 --port 5000
 ```
 
-### Test Against Remote AWS Server
+## Device Integration
+
+The device submodule enables real-time GPS localization on edge devices:
+
+### Architecture
+
+1. **Device calls server** for `init_map` via HTTP to get session and map data
+2. **Local processing** of `fetch_gps` using cached embeddings
+3. **TCP communication** between C++ reader and Python localizer
+
+### Device Setup
 
 ```bash
-# Set your AWS instance DNS
-export AWS_SERVER_DNS="ec2-12-34-56-78.compute-1.amazonaws.com"
+# Start device localizer (Python TCP server)
+cd device
+python localizer.py
 
-# Test device mode against AWS
-python test/test_fetch_gps_device.py --remote
+# Start reader (C++ image processor)
+./reader
+```
 
-# Test simulation against AWS
+### Device Workflow
+
+1. `reader.cpp` sends `init_map` request to `localizer.py`
+2. `localizer.py` calls server HTTP API, caches results locally
+3. `reader.cpp` processes stream images, sends to `localizer.py` via TCP
+4. `localizer.py` processes `fetch_gps` locally using cached embeddings
+5. GPS coordinates logged to `data/reader.txt`
+
+## Testing
+
+### Server Testing
+
+```bash
+# Test device mode initialization and stream processing
+cd server
+python test/test_fetch_gps_device.py [--remote] [--port 5000]
+
+# Test full simulation with path visualization
+python test/test_simulation.py [--remote] [--port 5000]
+```
+
+### Remote Testing
+
+Set environment variable for AWS testing:
+
+```bash
+export AWS_SERVER_DNS=your-server-dns.com
 python test/test_simulation.py --remote
-
-# Use custom port
-python test/test_fetch_gps_device.py --remote --port 8080
 ```
 
-### Generate Path Visualization
+## Data Flow
 
-```bash
-curl -X POST http://localhost:5000/visualize_path \
-  -H "Content-Type: application/json" \
-  -d '{"session_id": "your-session-id"}' \
-  --output path_visualization.jpg
-```
+### Server Mode
 
-### Check Server Health
+1. Client calls `/init_map` → Server generates map and embeddings
+2. Client calls `/fetch_gps` → Server finds GPS and updates path visualization
+3. Client calls `/visualize_path` → Server returns path image
 
-```bash
-curl http://localhost:5000/health
-```
+### Device Mode
 
-### List Active Sessions
-
-```bash
-curl http://localhost:5000/sessions
-```
-
-## Deployment
-
-This server folder is self-contained and can be deployed to any server:
-
-1. **Copy the server folder** to your deployment server
-2. **Setup models**: `./setup_models.sh`
-3. **Add GEE credentials** to `secrets/earth-engine-key.json`
-4. **Start server**: `python server.py --host 0.0.0.0 --port 5000`
-
-### Production Deployment
-
-For production, use uvicorn directly:
-
-```bash
-# Install production dependencies
-pip install uvicorn[standard]
-
-# Run with uvicorn (better performance)
-uvicorn server:app --host 0.0.0.0 --port 5000 --workers 4
-
-# Or use the server script
-python server.py --host 0.0.0.0 --port 80
-```
-
-## Configuration
-
-The server can be configured via command line arguments:
-
-- `--port`: Port number (default: 5000)
-- `--host`: Host address (default: 0.0.0.0)
-- `--debug`: Enable debug mode
-
-## Error Handling
-
-The server includes comprehensive error handling:
-
-- **Model Loading**: Falls back to random embeddings if DINOv2 fails
-- **GEE API**: Retry logic for satellite image downloads
-- **HTTP Errors**: Proper status codes and error messages
-- **Session Storage**: Graceful handling of corrupted session files
+1. Device calls server `/init_map` → Downloads and caches map/embeddings locally
+2. Device processes images locally using cached embeddings
+3. GPS results logged locally, path visualization updated incrementally
 
 ## Performance Notes
 
-- **DINOv2 Loading**: ~2-3 seconds on first run (downloads model)
-- **Embedding Generation**: ~100ms per patch on CPU, ~10ms on GPU
-- **Satellite Downloads**: 20-30 seconds for 1km area (parallel)
-- **Memory Usage**: ~500MB base + ~2GB for DINOv2 model
+- **Embedding Generation**: ~100 patches take 30-60 seconds on GPU
+- **GPS Matching**: ~50ms per image with cached embeddings
+- **Map Coverage**: 1000m uses 1x1 grid (minimal tiles), 2000m+ uses larger grids
+- **TCP vs UDP**: Device uses TCP for reliable large data transfer
+
+## Visualization Features
+
+- **Red dots**: GPS coordinates (5x5 pixels minimum)
+- **Red lines**: Path connections between consecutive points (thin, pure red)
+- **Incremental updates**: Each `fetch_gps` adds new point and line
+- **Storage**: Server saves to `data/server_paths/`, clients save to `data/client_paths/`
+
+## Configuration
+
+- **Default ports**: Server 5000, Device TCP 18001-18003
+- **Session persistence**: `data/sessions.pkl` stores metadata and path image file paths
+- **Coverage optimization**: Minimal grid sizes for efficient tile usage
+- **Non-overlapping patches**: 100 patches exactly for 1000m coverage
 
 ## Troubleshooting
 
-### Common Issues
+### Import Errors
 
-1. **DINOv2 fails to load**
+- Server must run from project root: `python server/app.py`
+- Device requires copied modules in `device/src/`
 
-   - Check internet connection for model download
-   - Verify PyTorch installation: `python -c "import torch; print(torch.__version__)"`
-   - Restart server and check DINOv2 loading
+### Port Conflicts
 
-2. **GEE authentication fails**
+- Use `tmux kill-server` to clean up processes
+- Device uses high ports (18001-18003) to avoid conflicts
 
-   - Verify `secrets/earth-engine-key.json` exists and is valid
-   - Check Google Cloud project has Earth Engine API enabled
+### Memory Issues
 
-3. **Out of memory errors**
-   - Reduce coverage area (use smaller `meters` value)
-   - Use CPU instead of GPU for DINOv2
-
-### Support
-
-For additional support:
-
-- Check `/docs` endpoint for interactive API documentation
-- Review server logs for detailed error messages
+- Sessions store file paths, not binary data
+- Large embeddings cached as JSON files
+- Use `mode=server` for lightweight responses

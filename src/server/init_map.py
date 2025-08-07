@@ -10,8 +10,8 @@ import time
 import math
 from typing import Dict, List, Tuple, Optional, Any
 from PIL import Image
-from models import SessionData, PatchData
-from gee_sampler import sample_satellite_image
+from general.models import SessionData, PatchData
+from server.gee_sampler import sample_satellite_image
 
 
 def calculate_grid_size_for_meters(meters: int) -> Tuple[int, int]:

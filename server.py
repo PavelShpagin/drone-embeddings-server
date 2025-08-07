@@ -18,13 +18,16 @@ from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 import uvicorn
 
 # Add src to path for imports
-sys.path.append(str(Path(__file__).parent / "src"))
+server_src_path = str(Path(__file__).parent / "src")
+sys.path.insert(0, server_src_path)
+# Add general to path so models import works
+sys.path.insert(0, str(Path(__file__).parent / "src" / "general"))
 
-from models import (
+from src.general.models import (
     InitMapRequest, HealthResponse, SessionInfo, SessionsResponse, 
     FetchGpsRequest, FetchGpsResponse, VisualizePathRequest, VisualizePathResponse
 )
-from server_core import SatelliteEmbeddingServer
+from src.server.server_core import SatelliteEmbeddingServer
 
 
 # Global server instance
@@ -124,7 +127,7 @@ async def http_fetch_gps(session_id: str = Form(...), image: UploadFile = File(.
 async def http_visualize_path(request: VisualizePathRequest):
     """HTTP endpoint for generating path visualization."""
     try:
-        from src.visualize_map import process_path_visualization_request
+        from src.general.visualize_map import process_path_visualization_request
         result = process_path_visualization_request(request.session_id, server.sessions)
         
         if result["success"]:
@@ -138,9 +141,9 @@ async def http_visualize_path(request: VisualizePathRequest):
         else:
             return VisualizePathResponse(**result)
                 
-        except Exception as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail={
-                "success": False,
+            "success": False,
             "error": str(e)
         })
 

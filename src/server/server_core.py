@@ -8,11 +8,11 @@ import os
 import pickle
 from typing import Dict, List, Optional
 import time
-from models import SessionData, PathPoint
-from embedder import TinyDINOEmbedder
-from init_map import process_init_map_request
-from fetch_gps import process_fetch_gps_request
-from image_metadata import extract_metadata
+from general.models import SessionData, PathPoint
+from server.embedder import TinyDINOEmbedder
+from server.init_map import process_init_map_request
+from general.fetch_gps import process_fetch_gps_request
+from general.image_metadata import extract_metadata
 import time
 
 
