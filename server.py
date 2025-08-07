@@ -141,9 +141,9 @@ async def http_visualize_path(request: VisualizePathRequest):
         else:
             return VisualizePathResponse(**result)
                 
-    except Exception as e:
+        except Exception as e:
         raise HTTPException(status_code=400, detail={
-            "success": False,
+                "success": False,
             "error": str(e)
         })
 

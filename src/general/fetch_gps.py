@@ -54,7 +54,7 @@ def find_closest_patch(query_embedding: np.ndarray, session_data) -> Optional[Di
     }
 
 
-def process_fetch_gps_request(image_data: bytes, session_id: str, embedder, sessions: dict) -> Dict[str, Any]:
+def process_fetch_gps_request(image_data: bytes, session_id: str, embedder, sessions: dict, visualize: bool = True) -> Dict[str, Any]:
     """
     Process a fetch_gps request.
     
@@ -63,6 +63,7 @@ def process_fetch_gps_request(image_data: bytes, session_id: str, embedder, sess
         session_id: Session ID to search in
         embedder: DINOv2 embedder instance
         sessions: Sessions dictionary
+        visualize: Whether to update path visualization (default: True)
         
     Returns:
         Response dictionary with GPS coordinates or error
@@ -94,6 +95,30 @@ def process_fetch_gps_request(image_data: bytes, session_id: str, embedder, sess
                 "success": False,
                 "error": "No patches found in session"
             }
+        
+        # Update path visualization if requested
+        if visualize:
+            import time
+            from general.visualize_map import update_path_visualization
+            from general.models import PathPoint
+            
+            # Update path visualization image BEFORE adding new point (so it can draw line from previous point)
+            image_path = update_path_visualization(
+                session_data, 
+                result["lat"], 
+                result["lng"]
+            )
+            
+            # Store image path in session data
+            session_data.path_image_file = image_path
+            
+            # Add new GPS point to session data AFTER visualization update
+            new_point = PathPoint(
+                lat=result["lat"],
+                lng=result["lng"],
+                timestamp=time.time()
+            )
+            session_data.path_data.append(new_point)
         
         return {
             "success": True,

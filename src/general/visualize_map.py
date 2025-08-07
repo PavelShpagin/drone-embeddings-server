@@ -166,11 +166,8 @@ def update_path_visualization(session_data, new_lat: float, new_lng: float) -> s
         prev_point = session_data.path_data[-1]
         prev_x, prev_y = gps_to_pixel_coords(prev_point.lat, prev_point.lng, viz_img.size, session_data.map_bounds)
         
-        # Draw thick red line
-        for offset in range(-2, 3):
-            for offset2 in range(-2, 3):
-                draw.line([(prev_x + offset, prev_y + offset2), (new_x + offset, new_y + offset2)], 
-                         fill=(255, 0, 0), width=2)
+        # Draw thin pure red line
+        draw.line([(prev_x, prev_y), (new_x, new_y)], fill=(255, 0, 0), width=2)
     
     # Draw large red dot (5x5 pixels minimum)
     dot_size = max(5, min(viz_img.width, viz_img.height) // 100)
