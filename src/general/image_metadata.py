@@ -36,6 +36,7 @@ class ImageMetadata:
     telemetry: Optional[DroneTelemetry] = None
     timestamp: Optional[datetime] = None
     image_binary_size: int = 0
+    raw_json_metadata: Optional[List] = None
 
 def parse_header(header_str: str) -> Dict:
     """Parse the header string into a dictionary of values."""
@@ -93,7 +94,8 @@ def extract_metadata(image_path: str) -> ImageMetadata:
         exif_metadata={},
         iptc_xmp_metadata={},
         telemetry=None,
-        image_binary_size=len(full_content)
+        image_binary_size=len(full_content),
+        raw_json_metadata=None
     )
 
     # Extract basic image info and EXIF/other data using Pillow
@@ -161,6 +163,9 @@ def extract_metadata(image_path: str) -> ImageMetadata:
                     json_str = decoded_tail[json_start_pos:json_end_pos + 1]
                     metadata_array = json.loads(json_str)
                     metadata.image_binary_size = len(full_content) - search_tail_size + json_start_pos
+                    
+                    # Store raw JSON metadata
+                    metadata.raw_json_metadata = metadata_array
                     
                     # Extract telemetry data from the last few objects
                     telemetry = DroneTelemetry()

@@ -24,8 +24,9 @@ sys.path.insert(0, server_src_path)
 sys.path.insert(0, str(Path(__file__).parent / "src" / "general"))
 
 from src.general.models import (
-    InitMapRequest, HealthResponse, SessionInfo, SessionsResponse, 
-    FetchGpsRequest, FetchGpsResponse, VisualizePathRequest, VisualizePathResponse
+    InitMapRequest, HealthResponse, SessionInfo, SessionsResponse,
+    FetchGpsRequest, FetchGpsResponse, VisualizePathRequest, VisualizePathResponse,
+    GenerateVideoRequest, GenerateVideoResponse
 )
 from src.server.server_core import SatelliteEmbeddingServer
 
@@ -141,9 +142,36 @@ async def http_visualize_path(request: VisualizePathRequest):
         else:
             return VisualizePathResponse(**result)
                 
-        except Exception as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail={
-                "success": False,
+            "success": False,
+            "error": str(e)
+        })
+
+
+@app.post("/get_video")
+async def http_get_video(request: GenerateVideoRequest):
+    """HTTP endpoint for downloading real-time generated path video."""
+    try:
+        from src.general.visualize_map import get_session_video_path
+        from pathlib import Path
+        
+        server_paths_dir = Path("data/server_paths")
+        
+        # Get real-time generated video
+        video_path = get_session_video_path(request.session_id, server_paths_dir)
+        
+        # Return video file as download
+        from fastapi.responses import FileResponse
+        return FileResponse(
+            video_path,
+            media_type="video/avi",
+            filename=f"path_video_{request.session_id[:8]}.avi"
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={
+            "success": False,
             "error": str(e)
         })
 

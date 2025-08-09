@@ -29,6 +29,7 @@ python test/test_simulation.py --remote
 ## Key Features
 
 - **Automatic Path Visualization**: `fetch_gps` automatically creates and updates red dot path images
+- **Real-time Video Generation**: Each GPS update automatically appends to MP4 time-lapse video
 - **Device Integration**: Works with remote device client via TCP sockets
 - **Session Management**: Persistent storage of maps, embeddings, and GPS paths
 - **Real-time Processing**: Fast GPS coordinate matching using DINOv2 embeddings
@@ -36,8 +37,9 @@ python test/test_simulation.py --remote
 ## API Endpoints
 
 - `POST /init_map` - Initialize map with satellite imagery and create embeddings
-- `POST /fetch_gps` - Get GPS coordinates from drone image (auto-updates visualization)
+- `POST /fetch_gps` - Get GPS coordinates from drone image (auto-updates visualization + video frames)
 - `POST /visualize_path` - Return current path visualization image
+- `POST /get_video` - Download real-time generated path time-lapse video
 - `GET /list_sessions` - List all active sessions
 
 ## Data Flow
@@ -52,10 +54,22 @@ python test/test_simulation.py --remote
 - Python 3.9+
 - CUDA-capable GPU (recommended)
 - Google Earth Engine credentials
-- FastAPI, torch, PIL, numpy
+- FastAPI, torch, PIL, numpy, opencv-python
 
 ## Installation
 
 ```bash
-pip install fastapi uvicorn torch torchvision numpy pillow earthengine-api
+pip install fastapi uvicorn torch torchvision numpy pillow earthengine-api opencv-python
+```
+
+## Real-time Video
+
+Download automatically generated time-lapse videos:
+
+```bash
+# Video is created automatically during GPS processing
+curl -X POST "http://localhost:5000/get_video" \
+     -H "Content-Type: application/json" \
+     -d '{"session_id": "your_session_id"}' \
+     --output path_video.avi
 ```

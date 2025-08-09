@@ -96,3 +96,13 @@ class VisualizePathResponse(BaseModel):
     path_points: Optional[int] = None
     message: Optional[str] = None
     error: Optional[str] = None
+
+class GenerateVideoRequest(BaseModel):
+    session_id: str
+    fps: Optional[float] = 2.0
+
+class GenerateVideoResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    video_path: Optional[str] = None
+    frame_count: Optional[int] = None
