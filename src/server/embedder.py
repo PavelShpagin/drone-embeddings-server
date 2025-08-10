@@ -73,10 +73,15 @@ class TinyDINOEmbedder:
             self.embedding_dim = 384
             self.is_loaded = False
     
-    def embed_patch(self, patch: np.ndarray) -> np.ndarray:
-        """Generate embedding for image patch using DINOv2."""
+    def embed_patch(self, patch: np.ndarray) -> dict:
+        """Generate representation dict for image patch.
+
+        Returns a dictionary with at least key "embedding" (np.ndarray).
+        Additional keys may be added in the future for flexibility.
+        """
         if not self.is_loaded or self.model is None:
-            return np.random.normal(0, 1, self.embedding_dim).astype(np.float32)
+            emb = np.random.normal(0, 1, self.embedding_dim).astype(np.float32)
+            return {"embedding": emb}
         
         try:
             import torch
@@ -88,10 +93,10 @@ class TinyDINOEmbedder:
             input_tensor = self.transform(PILImage.fromarray(patch)).unsqueeze(0).to(self.device)
             
             with torch.no_grad():
-                embedding = self.model(input_tensor).cpu().numpy().flatten()
-            
-            return embedding.astype(np.float32)
+                embedding = self.model(input_tensor).cpu().numpy().flatten().astype(np.float32)
+            return {"embedding": embedding}
             
         except Exception as e:
             print(f"Embedding error: {e}")
-            return np.random.normal(0, 1, self.embedding_dim).astype(np.float32)
+            emb = np.random.normal(0, 1, self.embedding_dim).astype(np.float32)
+            return {"embedding": emb}

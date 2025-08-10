@@ -1,139 +1,81 @@
 """
-GPS Fetching Module for Satellite Embedding Server
-Handles finding GPS coordinates by matching image embeddings.
+High-level GPS processing pipeline: decode -> embed -> match -> visualize.
 """
+from typing import Dict, Any, Optional
 import numpy as np
-from typing import Optional, Dict, Any, List
 from PIL import Image
 import io
-from models import SessionData, PatchData
+
+from models import SessionData
+from general.process import find_closest_patch
+from general.image_metadata import extract_metadata
 
 
-def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
-    """Calculate cosine similarity between two vectors."""
-    dot_product = np.dot(a, b)
-    norm_a = np.linalg.norm(a)
-    norm_b = np.linalg.norm(b)
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot_product / (norm_a * norm_b)
-
-
-def find_closest_patch(query_embedding: np.ndarray, session_data) -> Optional[Dict[str, Any]]:
-    """
-    Find the closest patch in session data to the query embedding.
-    
-    Args:
-        query_embedding: Embedding vector from input image
-        session_data: SessionData object containing patches
-        
-    Returns:
-        Dictionary with closest patch data including lat, lng, similarity score
-    """
-    if not session_data or not session_data.patches:
-        return None
-    
-    best_similarity = -1.0
-    best_patch = None
-    
-    for patch in session_data.patches:
-        similarity = cosine_similarity(query_embedding, patch.embedding)
-        if similarity > best_similarity:
-            best_similarity = similarity
-            best_patch = patch
-    
-    if best_patch is None:
-        return None
-    
-    return {
-        "lat": best_patch.lat,
-        "lng": best_patch.lng, 
-        "similarity": float(best_similarity),
-        "patch_coords": best_patch.patch_coords,
-        "confidence": "high" if best_similarity > 0.8 else "medium" if best_similarity > 0.6 else "low"
-    }
-
-
-def process_fetch_gps_request(image_data: bytes, session_id: str, embedder, sessions: dict, visualize: bool = True) -> Dict[str, Any]:
-    """
-    Process a fetch_gps request.
-    
-    Args:
-        image_data: Raw image bytes
-        session_id: Session ID to search in
-        embedder: DINOv2 embedder instance
-        sessions: Sessions dictionary
-        visualize: Whether to update path visualization (default: True)
-        
-    Returns:
-        Response dictionary with GPS coordinates or error
-    """
+def process_fetch_gps_request(
+    image_data: bytes,
+    session_id: str,
+    embedder,
+    sessions: dict,
+    visualize: bool = True,
+    image_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Process a fetch_gps request: embed, match, update path, return lat/lng."""
     try:
-        # Check if session exists
         if session_id not in sessions:
-            return {
-                "success": False,
-                "error": f"Session {session_id} not found"
-            }
-        
-        session_data = sessions[session_id]
-        
+            return {"success": False, "error": f"Session {session_id} not found"}
+
+        session_data: SessionData = sessions[session_id]
+
         # Convert image bytes to numpy array
         image = Image.open(io.BytesIO(image_data))
         if image.mode != 'RGB':
             image = image.convert('RGB')
         image_array = np.array(image)
-        
-        # Generate embedding for input image
-        query_embedding = embedder.embed_patch(image_array)
-        
-        # Find closest patch
-        result = find_closest_patch(query_embedding, session_data)
-        
+
+        # Extract metadata from the image path if available
+        metadata_dict: Dict[str, Any] = {}
+        try:
+            meta_path = image_path or getattr(image, 'filename', None)
+            if meta_path and isinstance(meta_path, str):
+                md = extract_metadata(meta_path)
+                telemetry = md.telemetry
+                if telemetry:
+                    metadata_dict = {
+                        "pos2D": telemetry.position_2d,
+                        "height": telemetry.height,
+                        "g_lat": None,
+                        "g_lon": None,
+                    }
+        except Exception:
+            pass
+
+        # Generate embedding
+        rep = embedder.embed_patch(image_array)
+        query_embedding = rep.get("embedding", rep)
+
+        # Find closest patch with metadata provided (for future flexibility)
+        result = find_closest_patch(query_embedding, session_data, metadata=metadata_dict)
         if result is None:
-            return {
-                "success": False,
-                "error": "No patches found in session"
-            }
-        
-        # Update path visualization if requested
+            return {"success": False, "error": "No patches found in session"}
+
         if visualize:
             import time
             from general.visualize_map import update_path_visualization
             from general.models import PathPoint
-            
-            # Update path visualization image BEFORE adding new point (so it can draw line from previous point)
-            image_path = update_path_visualization(
-                session_data, 
-                result["lat"], 
-                result["lng"]
-            )
-            
-            # Store image path in session data
-            session_data.path_image_file = image_path
-            
-            # Add new GPS point to session data AFTER visualization update
-            new_point = PathPoint(
-                lat=result["lat"],
-                lng=result["lng"],
-                timestamp=time.time()
-            )
+
+            image_path2 = update_path_visualization(session_data, result["lat"], result["lng"])
+            session_data.path_image_file = image_path2
+
+            new_point = PathPoint(lat=result["lat"], lng=result["lng"], timestamp=time.time())
             session_data.path_data.append(new_point)
-        
+
         return {
             "success": True,
             "session_id": session_id,
-            "gps": {
-                "lat": result["lat"],
-                "lng": result["lng"]
-            },
+            "gps": {"lat": result["lat"], "lng": result["lng"]},
             "similarity": result["similarity"],
             "confidence": result["confidence"],
             "patch_coords": result["patch_coords"]
         }
-        
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "error": str(e)}

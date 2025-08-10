@@ -215,8 +215,8 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
         print("Generating embeddings...")
         patches = []
         for i, (patch_array, coords) in enumerate(patch_data):
-            # Generate embedding
-            embedding = embedder.embed_patch(patch_array)
+            # Generate representation dict from embedder
+            rep = embedder.embed_patch(patch_array)
             
             # Calculate GPS coordinates for patch center
             patch_center_x = (coords[0] + coords[2]) // 2
@@ -228,7 +228,7 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
             )
             
             patches.append(PatchData(
-                embedding=embedding,
+                embedding_data={"embedding": rep["embedding"]},
                 lat=patch_lat,
                 lng=patch_lng,
                 patch_coords=coords
@@ -270,7 +270,7 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
                     "map_bounds": map_bounds,
                     "patches": [
                         {
-                            "embedding": patch.embedding.tolist(),
+                            "embedding": patch.embedding_data["embedding"].tolist(),
                             "lat": patch.lat,
                             "lng": patch.lng,
                             "coords": patch.patch_coords

@@ -13,8 +13,12 @@ from pydantic import BaseModel
 # Core Data Structures
 @dataclass
 class PatchData:
-    """Data for a single image patch with embedding and GPS coordinates."""
-    embedding: np.ndarray
+    """Data for a single image patch with representation data and GPS coordinates.
+
+    embedding_data holds at least key "embedding" (np.ndarray). It can be extended
+    with additional keys by different methods (e.g. patch image, metadata, etc.).
+    """
+    embedding_data: Dict[str, Any]
     lat: float
     lng: float
     patch_coords: Tuple[int, int, int, int]  # (x1, y1, x2, y2) in image coordinates
