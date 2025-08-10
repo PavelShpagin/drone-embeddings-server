@@ -17,7 +17,7 @@ from server.gee_sampler import sample_satellite_image
 def calculate_grid_size_for_meters(meters: int) -> Tuple[int, int]:
     """Calculate minimal grid size needed for coverage."""
     # Each GEE patch is 256px at 10m/pixel = 2560m coverage
-    TILE_COVERAGE_M = 256 * 10  # 2560m per tile
+    TILE_COVERAGE_M = 128 * 10  # 2560m per tile
     
     # Calculate minimum tiles needed
     tiles_needed = math.ceil(meters / TILE_COVERAGE_M)
