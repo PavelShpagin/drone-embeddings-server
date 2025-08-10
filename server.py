@@ -58,6 +58,16 @@ async def http_init_map(request: InitMapRequest):
             meters=request.meters,
             mode=request.mode
         )
+        # Optionally return compressed payload for device mode
+        if request.mode == "device" and request.compressed:
+            from fastapi.responses import Response
+            import gzip
+            import json
+            payload = json.dumps(result).encode('utf-8')
+            compressed = gzip.compress(payload, compresslevel=5)
+            return Response(content=compressed, media_type="application/json", headers={
+                "Content-Encoding": "gzip"
+            })
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail={

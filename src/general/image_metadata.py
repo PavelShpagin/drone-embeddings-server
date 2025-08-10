@@ -24,6 +24,9 @@ class DroneTelemetry:
     dx: Optional[float] = None
     dy: Optional[float] = None
     coefficient: Optional[float] = None
+    # Added ground-truth GPS fields if present in metadata tail
+    g_lat: Optional[float] = None
+    g_lon: Optional[float] = None
 
 @dataclass
 class ImageMetadata:
@@ -209,6 +212,11 @@ def extract_metadata(image_path: str) -> ImageMetadata:
                                 telemetry.dy = float(item['dy'])
                             if 'coef' in item and isinstance(item['coef'], (int, float)):
                                 telemetry.coefficient = float(item['coef'])
+                            # Ground-truth GPS if provided by synthetic streams
+                            if 'g_lat' in item and isinstance(item['g_lat'], (int, float)):
+                                telemetry.g_lat = float(item['g_lat'])
+                            if 'g_lon' in item and isinstance(item['g_lon'], (int, float)):
+                                telemetry.g_lon = float(item['g_lon'])
                     
                     metadata.telemetry = telemetry
                     

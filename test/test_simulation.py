@@ -23,7 +23,8 @@ def test_simulation(server_url):
         "lat": 50.4162,
         "lng": 30.8906,
         "meters": 1000,
-        "mode": "device"
+        "mode": "device",
+        "compressed": True
     }
     
     response = requests.post(f"{server_url}/init_map", json=payload, timeout=60)
@@ -32,7 +33,11 @@ def test_simulation(server_url):
         print(f"HTTP Error: {response.status_code}")
         return False
     
-    result = response.json()
+    if response.headers.get('Content-Encoding') == 'gzip':
+        import gzip
+        result = json.loads(gzip.decompress(response.content).decode('utf-8'))
+    else:
+        result = response.json()
     if not result.get("success"):
         print(f"Error: {result.get('error')}")
         return False

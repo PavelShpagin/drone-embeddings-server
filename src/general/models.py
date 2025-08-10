@@ -46,7 +46,8 @@ class SessionData:
     patches: List[PatchData]  # All patches with embeddings and GPS
     created_at: float
     meters_coverage: int
-    path_data: List[PathPoint] = field(default_factory=list)  # GPS tracking path data
+    path_data: List[PathPoint] = field(default_factory=list)  # Predicted GPS tracking path
+    gt_path_data: List[PathPoint] = field(default_factory=list)  # Ground-truth GPS path
     path_image_file: Optional[str] = None  # Incremental path visualization image
 
 
@@ -56,6 +57,7 @@ class InitMapRequest(BaseModel):
     lng: float
     meters: int = 2000
     mode: str = "server"
+    compressed: Optional[bool] = False
 
 
 class HealthResponse(BaseModel):

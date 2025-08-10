@@ -1,4 +1,23 @@
 #!/usr/bin/env python3
+import requests, json, gzip
+
+def main(server_url: str):
+    payload = {"lat": 50.4162, "lng": 30.8906, "meters": 1000, "mode": "device", "compressed": True}
+    r = requests.post(f"{server_url}/init_map", json=payload, timeout=120)
+    r.raise_for_status()
+    if r.headers.get('Content-Encoding') == 'gzip':
+        data = json.loads(gzip.decompress(r.content).decode('utf-8'))
+    else:
+        data = r.json()
+    assert data.get('success'), data
+    print('session', data['session_id'])
+
+if __name__ == '__main__':
+    import sys
+    url = sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:5000'
+    main(url)
+
+#!/usr/bin/env python3
 """
 Test Fetch GPS Device Mode
 =========================

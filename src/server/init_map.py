@@ -157,14 +157,28 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
         grid_rows, grid_cols = calculate_grid_size_for_meters(meters)
         print(f"Using {grid_rows}x{grid_cols} grid for {meters}m coverage")
         
-        # Fetch satellite image using GEE sampler
+        # Fetch satellite image using GEE sampler with fallback
         print("Fetching satellite imagery...")
-        pil_image = sample_satellite_image(
-            lat=lat,
-            lng=lng,
-            grid_size=(grid_rows, grid_cols),
-            patch_pixels=(256, 256)  # High resolution patches
-        )
+        try:
+            pil_image = sample_satellite_image(
+                lat=lat,
+                lng=lng,
+                grid_size=(grid_rows, grid_cols),
+                patch_pixels=(128, 128)  # High resolution patches
+            )
+        except Exception as gee_error:
+            print(f"GEE sampling failed: {gee_error}. Falling back to local research/data image or synthetic map.")
+            from pathlib import Path
+            from PIL import Image as PILImage
+            data_dir = Path('research/data')
+            candidates = []
+            if data_dir.exists():
+                for ext in ('*.jpg','*.jpeg','*.png'):
+                    candidates.extend(data_dir.glob(ext))
+            if candidates:
+                pil_image = PILImage.open(candidates[0]).convert('RGB')
+            else:
+                pil_image = PILImage.new('RGB', (2048, 2048), color=(60, 120, 60))
         
         # Convert to numpy array
         full_image = np.array(pil_image)

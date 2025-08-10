@@ -8,6 +8,7 @@ pydantic>=1.10.0,<3.0.0
 Pillow>=9.0.0,<11.0.0
 numpy>=1.21.0,<2.0.0
 opencv-python-headless>=4.7.0
+matplotlib>=3.7.0
 
 # Deep learning models - CPU-only for AWS deployment
 # torch>=1.13.0,<2.1.0

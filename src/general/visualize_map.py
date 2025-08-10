@@ -136,7 +136,7 @@ def image_to_bytes(image: Image.Image, output_path: Optional[str] = None) -> byt
     return img_buffer.getvalue()
 
 
-def update_path_visualization(session_data, new_lat: float, new_lng: float) -> str:
+def update_path_visualization(session_data, new_lat: float, new_lng: float, g_lat: Optional[float] = None, g_lon: Optional[float] = None) -> str:
     """
     Update path visualization with a new GPS point and save to server_paths.
     
@@ -161,7 +161,7 @@ def update_path_visualization(session_data, new_lat: float, new_lng: float) -> s
     # Convert new GPS to pixel coordinates
     new_x, new_y = gps_to_pixel_coords(new_lat, new_lng, viz_img.size, session_data.map_bounds)
     
-    # Draw line from previous point if exists
+    # Draw line from previous predicted point if exists
     if len(session_data.path_data) > 0:
         prev_point = session_data.path_data[-1]
         prev_x, prev_y = gps_to_pixel_coords(prev_point.lat, prev_point.lng, viz_img.size, session_data.map_bounds)
@@ -169,10 +169,22 @@ def update_path_visualization(session_data, new_lat: float, new_lng: float) -> s
         # Draw thin pure red line
         draw.line([(prev_x, prev_y), (new_x, new_y)], fill=(255, 0, 0), width=2)
     
-    # Draw large red dot (5x5 pixels minimum)
+    # Draw large red dot (predicted)
     dot_size = max(5, min(viz_img.width, viz_img.height) // 100)
     draw.ellipse([new_x - dot_size, new_y - dot_size, new_x + dot_size, new_y + dot_size], 
                 fill=(255, 0, 0), outline=(255, 255, 255), width=2)
+
+    # Draw ground-truth path if provided (g_lat/g_lon)
+    if g_lat is not None and g_lon is not None:
+        gt_x, gt_y = gps_to_pixel_coords(g_lat, g_lon, viz_img.size, session_data.map_bounds)
+        # Line from previous GT point
+        if hasattr(session_data, 'gt_path_data') and len(session_data.gt_path_data) > 0:
+            prev_gt = session_data.gt_path_data[-1]
+            prev_gt_x, prev_gt_y = gps_to_pixel_coords(prev_gt.lat, prev_gt.lng, viz_img.size, session_data.map_bounds)
+            draw.line([(prev_gt_x, prev_gt_y), (gt_x, gt_y)], fill=(0, 200, 0), width=2)
+        # GT dot
+        draw.ellipse([gt_x - dot_size, gt_y - dot_size, gt_x + dot_size, gt_y + dot_size], 
+                     fill=(0, 200, 0), outline=(255, 255, 255), width=2)
     
     # Save to server_paths
     server_paths_dir = Path("data/server_paths")
