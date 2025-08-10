@@ -2,9 +2,13 @@
 DINOv2 Embedder for Satellite Imagery
 =====================================
 Handles deep learning embedding generation using DINOv2 model.
+
+This research variant follows the project-wide convention:
+embed_patch returns a dictionary with at least the key "embedding" -> np.ndarray.
 """
 
 import numpy as np
+from typing import Dict, Any
 
 
 class TinyDINOEmbedder:
@@ -73,10 +77,13 @@ class TinyDINOEmbedder:
             self.embedding_dim = 384
             self.is_loaded = False
     
-    def embed_patch(self, patch: np.ndarray) -> np.ndarray:
-        """Generate embedding for image patch using DINOv2."""
+    def embed_patch(self, patch: np.ndarray) -> Dict[str, Any]:
+        """Generate embedding for image patch using DINOv2.
+
+        Returns a dict: {"embedding": np.ndarray}
+        """
         if not self.is_loaded or self.model is None:
-            return np.random.normal(0, 1, self.embedding_dim).astype(np.float32)
+            return {"embedding": np.random.normal(0, 1, self.embedding_dim).astype(np.float32)}
         
         try:
             import torch
@@ -88,10 +95,10 @@ class TinyDINOEmbedder:
             input_tensor = self.transform(PILImage.fromarray(patch)).unsqueeze(0).to(self.device)
             
             with torch.no_grad():
-                embedding = self.model(input_tensor).cpu().numpy().flatten()
+                embedding = self.model(input_tensor).cpu().numpy().flatten().astype(np.float32)
             
-            return embedding.astype(np.float32)
+            return {"embedding": embedding}
             
         except Exception as e:
             print(f"Embedding error: {e}")
-            return np.random.normal(0, 1, self.embedding_dim).astype(np.float32)
+            return {"embedding": np.random.normal(0, 1, self.embedding_dim).astype(np.float32)}
