@@ -32,6 +32,7 @@ env/
 
 # Data and secrets
 data/maps/
+data/logs/
 data/embeddings/
 data/server_paths/
 data/client_paths/
@@ -39,7 +40,7 @@ data/sessions.pkl
 data/zips/
 data/logs/
 secrets/
-*.pkl
+*.pklS
 *.npy
 
 # IDE
