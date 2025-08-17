@@ -21,18 +21,20 @@ print_usage() {
     echo "Usage: $0 [OPTIONS] [SESSION_ID] [LOGGER_ID]"
     echo ""
     echo "OPTIONS:"
-    echo "  -s, --server URL     Server URL (default: $DEFAULT_SERVER)"
+    echo "  -s, --server URL     Server URL (default: AWS server)"
     echo "  -o, --output DIR     Output directory (default: $LOGS_DIR)"
     echo "  -l, --list          List available sessions"
     echo "  -i, --info SESSION  Get info about a specific session"
     echo "  -h, --help          Show this help message"
     echo ""
     echo "EXAMPLES:"
-    echo "  $0 --list                                    # List all available sessions"
-    echo "  $0 --info abc123                            # Get info about session abc123"
-    echo "  $0 abc123                                    # Download all logs for session abc123"
-    echo "  $0 abc123 logger456                         # Download specific logger logs"
-    echo "  $0 -s http://localhost:5000 abc123          # Use local server"
+    echo "  $0 --list                           # List all sessions"
+    echo "  $0 --info abc123                    # Get session info"
+    echo "  $0 abc123                           # Download all logs"
+    echo "  $0 abc123 logger456                 # Download specific logger"
+    echo "  $0 -s http://localhost:5000 abc123  # Use local server"
+    echo ""
+    echo "Default server: $DEFAULT_SERVER"
 }
 
 print_error() {
@@ -209,19 +211,21 @@ download_logs() {
         print_info "Downloading all logs for session $session_id..."
     fi
     
-    # Download the zip file
-    curl_cmd="curl -s -X POST -H 'Content-Type: application/json' -d '$api_data' '$SERVER_URL/fetch_logs'"
+    # Download the file and check if it's a zip
+    print_info "Downloading logs..."
     
-    print_info "Calling: $curl_cmd"
+    # Create a temporary file to store the response
+    temp_file=$(mktemp)
     
-    # Check if response is a zip file or error
-    response_headers=$(curl -s -I -X POST -H 'Content-Type: application/json' -d "$api_data" "$SERVER_URL/fetch_logs")
+    # Download the response and capture HTTP status
+    http_status=$(curl -s -w "%{http_code}" -X POST -H 'Content-Type: application/json' \
+                      -d "$api_data" "$SERVER_URL/fetch_logs" -o "$temp_file")
     
-    if echo "$response_headers" | grep -q "application/zip"; then
-        # Download the actual file
-        curl -X POST -H 'Content-Type: application/json' -d "$api_data" "$SERVER_URL/fetch_logs" -o "$OUTPUT_DIR/$filename"
-        
-        if [[ $? -eq 0 && -f "$OUTPUT_DIR/$filename" ]]; then
+    if [[ "$http_status" == "200" ]]; then
+        # Check if the response is a zip file by looking at the first few bytes
+        if file "$temp_file" | grep -q "Zip archive"; then
+            # It's a zip file, move it to the final location
+            mv "$temp_file" "$OUTPUT_DIR/$filename"
             file_size=$(ls -lh "$OUTPUT_DIR/$filename" | awk '{print $5}')
             print_success "Downloaded: $OUTPUT_DIR/$filename ($file_size)"
             
@@ -251,19 +255,34 @@ download_logs() {
                 fi
             fi
         else
-            print_error "Failed to download logs"
+            # It's probably an error response (JSON)
+            error_response=$(cat "$temp_file")
+            rm -f "$temp_file"
+            
+            print_error "Server returned an error:"
+            if [[ $JQ_AVAILABLE == true ]]; then
+                echo "$error_response" | jq -r '.error // .message // "Unknown error"'
+            else
+                echo "$error_response"
+            fi
             exit 1
         fi
     else
-        # It's probably an error response
-        error_response=$(curl -s -X POST -H 'Content-Type: application/json' -d "$api_data" "$SERVER_URL/fetch_logs")
+        # HTTP error
+        error_response=$(cat "$temp_file")
+        rm -f "$temp_file"
+        
+        print_error "HTTP $http_status error:"
         if [[ $JQ_AVAILABLE == true ]]; then
-            echo "$error_response" | jq -r '.error // .message // "Unknown error"'
+            echo "$error_response" | jq -r '.error // .message // "HTTP error"'
         else
             echo "$error_response"
         fi
         exit 1
     fi
+    
+    # Clean up temp file if it still exists
+    rm -f "$temp_file"
 }
 
 # Main logic
