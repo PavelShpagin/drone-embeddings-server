@@ -25,14 +25,16 @@ print_usage() {
     echo "  -o, --output DIR     Output directory (default: $LOGS_DIR)"
     echo "  -l, --list          List available sessions"
     echo "  -i, --info SESSION  Get info about a specific session"
+    echo "  -a, --all           Download all logs from all sessions"
     echo "  -h, --help          Show this help message"
     echo ""
     echo "EXAMPLES:"
+    echo "  $0                                  # Download all logs (default)"
+    echo "  $0 --all                            # Download all logs explicitly"
     echo "  $0 --list                           # List all sessions"
     echo "  $0 --info abc123                    # Get session info"
-    echo "  $0 abc123                           # Download all logs"
+    echo "  $0 abc123                           # Download session logs"
     echo "  $0 abc123 logger456                 # Download specific logger"
-    echo "  $0 -s http://localhost:5000 abc123  # Use local server"
     echo ""
     echo "Default server: $DEFAULT_SERVER"
 }
@@ -57,6 +59,7 @@ print_warning() {
 SERVER_URL="$DEFAULT_SERVER"
 OUTPUT_DIR="$LOGS_DIR"
 LIST_SESSIONS=false
+DOWNLOAD_ALL=false
 SESSION_INFO=""
 SESSION_ID=""
 LOGGER_ID=""
@@ -78,6 +81,10 @@ while [[ $# -gt 0 ]]; do
         -i|--info)
             SESSION_INFO="$2"
             shift 2
+            ;;
+        -a|--all)
+            DOWNLOAD_ALL=true
+            shift
             ;;
         -h|--help)
             print_usage
@@ -238,7 +245,7 @@ download_logs() {
                 mkdir -p "$extract_dir"
                 
                 if command -v unzip &> /dev/null; then
-                    unzip -q "$OUTPUT_DIR/$filename" -d "$extract_dir"
+                    unzip -o -q "$OUTPUT_DIR/$filename" -d "$extract_dir"
                     print_success "Extracted to: $extract_dir"
                     
                     # Show contents
@@ -285,15 +292,91 @@ download_logs() {
     rm -f "$temp_file"
 }
 
+# Function to download all logs from all sessions
+download_all_logs() {
+    print_info "Fetching list of all available sessions..."
+    
+    response=$(api_call "available_logs")
+    
+    if [[ $JQ_AVAILABLE == true ]]; then
+        # Extract sessions using jq
+        sessions=$(echo "$response" | jq -r '.sessions[]?.session_id // empty')
+    else
+        # Basic extraction without jq (less reliable but works)
+        sessions=$(echo "$response" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4)
+    fi
+    
+    if [[ -z "$sessions" ]]; then
+        print_warning "No sessions found to download"
+        return
+    fi
+    
+    session_count=$(echo "$sessions" | wc -l)
+    print_info "Found $session_count sessions to download"
+    
+    # Create main output directory
+    mkdir -p "$OUTPUT_DIR"
+    
+    # Download each session
+    local count=0
+    while IFS= read -r session_id; do
+        if [[ -n "$session_id" ]]; then
+            count=$((count + 1))
+            print_info "[$count/$session_count] Downloading logs for session: $session_id"
+            
+            # Download without prompting for extraction
+            filename="logs_${session_id}_all.zip"
+            api_data="{\"session_id\": \"$session_id\"}"
+            
+            # Create a temporary file to store the response
+            temp_file=$(mktemp)
+            
+            # Download the response and capture HTTP status
+            http_status=$(curl -s -w "%{http_code}" -X POST -H 'Content-Type: application/json' \
+                              -d "$api_data" "$SERVER_URL/fetch_logs" -o "$temp_file")
+            
+            if [[ "$http_status" == "200" ]]; then
+                if file "$temp_file" | grep -q "Zip archive"; then
+                    # It's a zip file, move it to the final location
+                    mv "$temp_file" "$OUTPUT_DIR/$filename"
+                    file_size=$(ls -lh "$OUTPUT_DIR/$filename" | awk '{print $5}')
+                    
+                    # Auto-extract without prompting
+                    extract_dir="$OUTPUT_DIR/$(basename "$filename" .zip)"
+                    mkdir -p "$extract_dir"
+                    
+                    if command -v unzip &> /dev/null; then
+                        unzip -o -q "$OUTPUT_DIR/$filename" -d "$extract_dir"
+                        print_success "Downloaded and extracted: $extract_dir ($file_size)"
+                    else
+                        print_success "Downloaded: $OUTPUT_DIR/$filename ($file_size)"
+                        print_warning "unzip not available - manual extraction required"
+                    fi
+                else
+                    print_warning "Session $session_id: No logs found or error response"
+                    rm -f "$temp_file"
+                fi
+            else
+                print_warning "Session $session_id: HTTP $http_status error"
+                rm -f "$temp_file"
+            fi
+        fi
+    done <<< "$sessions"
+    
+    print_success "Downloaded logs from $count sessions to: $OUTPUT_DIR"
+}
+
 # Main logic
 if [[ "$LIST_SESSIONS" == true ]]; then
     list_available_sessions
 elif [[ -n "$SESSION_INFO" ]]; then
     get_session_info "$SESSION_INFO"
+elif [[ "$DOWNLOAD_ALL" == true ]]; then
+    download_all_logs
 elif [[ -n "$SESSION_ID" ]]; then
     download_logs "$SESSION_ID" "$LOGGER_ID"
 else
-    print_error "No action specified"
-    print_usage
-    exit 1
+    # Default behavior: download all logs
+    print_info "No specific action specified - downloading all logs (use --help for options)"
+    download_all_logs
 fi
