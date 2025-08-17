@@ -12,7 +12,7 @@ API:
 import sys
 from pathlib import Path
 import time
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 import uvicorn
@@ -35,9 +35,9 @@ from src.server.server_core import SatelliteEmbeddingServer
 server = SatelliteEmbeddingServer()
 
 
-def init_map(lat: float, lng: float, meters: int = 2000, mode: str = "server") -> Dict[str, Any]:
+def init_map(lat: float, lng: float, meters: int = 2000, mode: str = "server", session_id: Optional[str] = None) -> Dict[str, Any]:
     """Wrapper function for backward compatibility."""
-    return server.init_map(lat, lng, meters, mode)
+    return server.init_map(lat, lng, meters, mode, session_id)
 
 
 # FastAPI HTTP Server
@@ -56,10 +56,19 @@ async def http_init_map(request: InitMapRequest):
             lat=request.lat,
             lng=request.lng,
             meters=request.meters,
-            mode=request.mode
+            mode=request.mode,
+            session_id=request.session_id
         )
+        # Handle zip_data response for device mode
+        if request.mode == "device" and "zip_data" in result:
+            from fastapi.responses import Response
+            return Response(
+                content=result["zip_data"], 
+                media_type="application/zip",
+                headers={"Content-Disposition": f"attachment; filename=session_{result['session_id'][:8]}.zip"}
+            )
         # Optionally return compressed payload for device mode
-        if request.mode == "device" and request.compressed:
+        elif request.mode == "device" and request.compressed:
             from fastapi.responses import Response
             import gzip
             import json
@@ -86,13 +95,22 @@ async def http_list_sessions():
         for session_id in sessions:
             session = server.get_session(session_id)
             if session:
-                session_data.append(SessionInfo(
-                    session_id=session_id,
-                    created_at=session.created_at,
-                    meters_coverage=session.meters_coverage,
-                    patch_count=len(session.patches),
-                    map_bounds=session.map_bounds
-                ))
+                # Load embeddings data to get patch count and bounds
+                try:
+                    import json
+                    with open(session.embeddings_path, 'r') as f:
+                        embeddings_data = json.load(f)
+                    
+                    session_data.append(SessionInfo(
+                        session_id=session_id,
+                        created_at=session.created_at,
+                        meters_coverage=embeddings_data["meters_coverage"],
+                        patch_count=len(embeddings_data["patches"]),
+                        map_bounds=embeddings_data["map_bounds"]
+                    ))
+                except Exception as e:
+                    print(f"Error loading session {session_id}: {e}")
+                    continue
         
         return SessionsResponse(
             success=True,
@@ -118,14 +136,15 @@ async def http_health():
 
 
 @app.post("/fetch_gps", response_model=FetchGpsResponse)
-async def http_fetch_gps(session_id: str = Form(...), image: UploadFile = File(...)):
+async def http_fetch_gps(session_id: str = Form(...), image: UploadFile = File(...), 
+                        logging_id: Optional[str] = Form(None), visualization: bool = Form(False)):
     """HTTP endpoint for finding GPS coordinates from an image."""
     try:
         # Read image data
         image_data = await image.read()
         
         # Process request
-        result = server.fetch_gps(image_data, session_id)
+        result = server.fetch_gps(image_data, session_id, logging_id, visualization)
         return result
         
     except Exception as e:
