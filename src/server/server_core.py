@@ -396,8 +396,13 @@ class SatelliteEmbeddingServer:
     
     def _update_error_plot(self, csv_path: Path, log_dir: Path):
         """Update error vs time plot with 50-frame average."""
-        import matplotlib.pyplot as plt
-        import pandas as pd
+        try:
+            import matplotlib.pyplot as plt
+            import pandas as pd
+        except ImportError as e:
+            print(f"Warning: Could not import plotting libraries: {e}")
+            print("Enhanced plotting disabled. Install matplotlib and pandas for full functionality.")
+            return
         
         try:
             # Read CSV data

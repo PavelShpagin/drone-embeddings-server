@@ -156,12 +156,19 @@ def test_fetch_gps_enhanced(server_url, session_id):
     })
     
     response = requests.post(f"{server_url}/fetch_gps", files=files, data=data, timeout=30)
+    
+    if response.status_code != 200:
+        print(f"✗ HTTP Error: {response.status_code}")
+        print(f"Response: {response.text}")
+        return False
+    
     result = response.json()
     
     if result.get("success"):
         print("✓ Enhanced logging request successful")
     else:
         print(f"✗ Enhanced logging failed: {result.get('error')}")
+        print(f"Full response: {result}")
         return False
     
     return True
