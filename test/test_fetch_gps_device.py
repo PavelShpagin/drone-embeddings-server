@@ -14,6 +14,8 @@ import tempfile
 import os
 from PIL import Image
 import io
+import pickle
+from datetime import datetime
 
 
 def test_init_map_device_mode(server_url):
@@ -75,7 +77,7 @@ def test_init_map_device_mode(server_url):
         f.write(response.content)
     print(f"✓ Saved zip file: {zip_path} ({len(response.content)} bytes)")
     
-    # Extract and verify zip contents
+    # Extract and verify zip contents, then store locally like a real device
     with zipfile.ZipFile(zip_path, 'r') as zf:
         files = zf.namelist()
         print(f"✓ Zip contains: {files}")
@@ -93,9 +95,35 @@ def test_init_map_device_mode(server_url):
         embeddings_data = json.loads(zf.read('embeddings.json').decode())
         print(f"✓ Embeddings: {len(embeddings_data['patches'])} patches")
         print(f"✓ Coverage: {embeddings_data['meters_coverage']}m")
+        
+        # Simulate device behavior: store files in data folder
+        print("\n4. Simulating device storage in data/ folder...")
+        
+        # Use existing data directories (same as server)
+        data_dir = Path("data")
+        maps_dir = data_dir / "maps"
+        embeddings_dir = data_dir / "embeddings"
+        
+        # Directories should already exist from server initialization
+        for dir_path in [data_dir, maps_dir, embeddings_dir]:
+            dir_path.mkdir(parents=True, exist_ok=True)
+        
+        # Save map in data/maps (will overwrite server's copy, but that's fine for testing)
+        map_path = maps_dir / f"{session_id}.png"
+        with open(map_path, 'wb') as f:
+            f.write(map_data)
+        print(f"✓ Stored map in data/maps: {map_path}")
+        
+        # Save embeddings in data/embeddings (will overwrite server's copy, but that's fine for testing)
+        embeddings_path = embeddings_dir / f"{session_id}.json"
+        with open(embeddings_path, 'w') as f:
+            json.dump(embeddings_data, f)
+        print(f"✓ Stored embeddings in data/embeddings: {embeddings_path}")
+        
+        print(f"✓ Device simulation complete - files stored in data/ folder")
     
-    # Test 3: Session caching
-    print("\n3. Testing session caching...")
+    # Test 5: Session caching
+    print("\n5. Testing session caching...")
     cached_payload = {
         "lat": 50.4162,  # These will be ignored
         "lng": 30.8906,
@@ -112,15 +140,15 @@ def test_init_map_device_mode(server_url):
         print("✗ Cache miss or error")
         return False
     
-    # Cleanup
-    zip_path.unlink()
+    # Keep the zip file for inspection
+    print(f"✓ Zip file saved as: {zip_path}")
     
     return session_id
 
 
 def test_fetch_gps_enhanced(server_url, session_id):
     """Test enhanced fetch_gps with logging."""
-    print(f"\n4. Testing enhanced fetch_gps with session: {session_id[:8]}")
+    print(f"\n4. Testing enhanced fetch_gps with session: {session_id}")
     
     # Create dummy image
     dummy_image = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
@@ -192,7 +220,7 @@ def test_sessions_endpoint(server_url):
     sessions = result.get("sessions", [])
     print(f"✓ Found {len(sessions)} sessions")
     for session in sessions:
-        print(f"  - {session['session_id'][:8]}: {session['meters_coverage']}m coverage, {session['patch_count']} patches")
+        print(f"  - {session['session_id']}: {session['meters_coverage']}m coverage, {session['patch_count']} patches")
     
     return True
 

@@ -190,7 +190,7 @@ def update_path_visualization(session_data, new_lat: float, new_lng: float, g_la
     server_paths_dir = Path("data/server_paths")
     server_paths_dir.mkdir(parents=True, exist_ok=True)
     
-    image_path = server_paths_dir / f"path_{session_data.session_id[:8]}.jpg"
+    image_path = server_paths_dir / f"path_{session_data.session_id}.jpg"
     viz_img.save(image_path, 'JPEG', quality=95)
     
     # Append frame to video for real-time time-lapse (if enabled)
@@ -207,7 +207,7 @@ def _append_video_frame(viz_img: Image.Image, session_id: str, server_paths_dir:
     try:
         import numpy as np
         
-        session_key = session_id[:8]
+        session_key = session_id
         
         # Initialize frame buffer for session
         if session_key not in _frame_buffers:
@@ -277,7 +277,7 @@ def _generate_video_from_buffer(session_key: str, server_paths_dir: Path) -> Non
 
 def finalize_session_video(session_id: str) -> None:
     """Finalize video generation for a session."""
-    session_key = session_id[:8]
+    session_key = session_id
     
     # Generate final video from all buffered frames
     if session_key in _frame_buffers:
@@ -297,7 +297,7 @@ def finalize_session_video(session_id: str) -> None:
 
 def _save_individual_frame(viz_img: Image.Image, session_id: str, server_paths_dir: Path) -> None:
     """Fallback: Save individual frame (for when OpenCV not available)."""
-    frames_dir = server_paths_dir / f"frames_{session_id[:8]}"
+    frames_dir = server_paths_dir / f"frames_{session_id}"
     frames_dir.mkdir(exist_ok=True)
     
     frame_files = list(frames_dir.glob("frame_*.jpg"))
@@ -315,7 +315,7 @@ def _save_individual_frame(viz_img: Image.Image, session_id: str, server_paths_d
 
 def get_session_video_path(session_id: str, server_paths_dir: Path) -> str:
     """Get path to real-time generated video file."""
-    video_path = server_paths_dir / f"path_video_{session_id[:8]}.avi"
+    video_path = server_paths_dir / f"path_video_{session_id}.avi"
     
     # Finalize video if still being written
     finalize_session_video(session_id)

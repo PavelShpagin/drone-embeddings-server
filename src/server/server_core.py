@@ -661,7 +661,7 @@ class SatelliteEmbeddingServer:
         server_paths_dir = Path("data/server_paths")
         server_paths_dir.mkdir(parents=True, exist_ok=True)
         
-        image_path = server_paths_dir / f"path_{session_data.session_id[:8]}.jpg"
+        image_path = server_paths_dir / f"path_{session_data.session_id}.jpg"
         viz_img.save(image_path, 'JPEG', quality=95)
         
         return str(image_path)
@@ -671,6 +671,6 @@ class SatelliteEmbeddingServer:
         if session_id in self.sessions:
             del self.sessions[session_id]
             self._save_sessions()
-            print(f"Session {session_id[:8]} cleaned up")
+            print(f"Session {session_id} cleaned up")
             return True
         return False

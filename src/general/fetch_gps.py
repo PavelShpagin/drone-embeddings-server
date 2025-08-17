@@ -28,7 +28,7 @@ def _update_statistics(session_data, pred_lat: float, pred_lng: float, gt_lat: f
     try:
         stats_dir = Path('data/statistics')
         stats_dir.mkdir(parents=True, exist_ok=True)
-        sid = session_data.session_id[:8]
+        sid = session_data.session_id
         csv_path = stats_dir / f'stats_{sid}.csv'
         txt_path = stats_dir / f'stats_{sid}.txt'
         curve_png = stats_dir / f'error_curve_{sid}.png'

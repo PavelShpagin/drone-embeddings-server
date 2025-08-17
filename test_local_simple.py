@@ -82,7 +82,7 @@ def test_local_server():
         print("✗ zips/ directory not found")
     
     # Test 3: Fetch GPS
-    print(f"\n3. Testing fetch_gps with session: {session_id[:8]}")
+    print(f"\n3. Testing fetch_gps with session: {session_id}")
     
     # Create dummy image
     dummy_image = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)

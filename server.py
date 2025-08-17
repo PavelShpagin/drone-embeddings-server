@@ -65,7 +65,7 @@ async def http_init_map(request: InitMapRequest):
             return Response(
                 content=result["zip_data"], 
                 media_type="application/zip",
-                headers={"Content-Disposition": f"attachment; filename=session_{result['session_id'][:8]}.zip"}
+                headers={"Content-Disposition": f"attachment; filename=session_{result['session_id']}.zip"}
             )
         # Optionally return compressed payload for device mode
         elif request.mode == "device" and request.compressed:
@@ -166,7 +166,7 @@ async def http_visualize_path(request: VisualizePathRequest):
             return StreamingResponse(
                 io.BytesIO(result["image_bytes"]),
                 media_type="image/jpeg",
-                headers={"Content-Disposition": f"attachment; filename=path_{request.session_id[:8]}.jpg"}
+                headers={"Content-Disposition": f"attachment; filename=path_{request.session_id}.jpg"}
             )
         else:
             return VisualizePathResponse(**result)
@@ -195,7 +195,7 @@ async def http_get_video(request: GenerateVideoRequest):
         return FileResponse(
             video_path,
             media_type="video/avi",
-            filename=f"path_video_{request.session_id[:8]}.avi"
+            filename=f"path_video_{request.session_id}.avi"
         )
         
     except Exception as e:

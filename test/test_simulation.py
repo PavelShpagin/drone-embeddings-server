@@ -23,19 +23,40 @@ def test_simulation_new_architecture(server_url):
     print(f"Server URL: {server_url}")
     
     # Generate a unique logger_id for this simulation
-    logger_id = str(uuid.uuid4())[:8]
+    logger_id = str(uuid.uuid4())
     print(f"Using logger_id: {logger_id}")
     
-    # Initialize map in device mode (returns zip)
-    payload = {
+    # First get the full session_id from server mode
+    server_payload = {
         "lat": 50.4162,
         "lng": 30.8906,
         "meters": 1000,
-        "mode": "device"
+        "mode": "server"
     }
     
     print("\n1. Initializing map session...")
-    response = requests.post(f"{server_url}/init_map", json=payload, timeout=120)
+    server_response = requests.post(f"{server_url}/init_map", json=server_payload, timeout=120)
+    
+    if server_response.status_code != 200:
+        print(f"HTTP Error: {server_response.status_code}")
+        return False
+    
+    # Get full session_id from JSON response
+    server_result = server_response.json()
+    if not server_result.get("success"):
+        print(f"Server error: {server_result}")
+        return False
+    
+    session_id = server_result["session_id"]
+    print(f"✓ Created session: {session_id}")
+    
+    # Now get the zip file in device mode using the full session_id
+    device_payload = {
+        "session_id": session_id,
+        "mode": "device"
+    }
+    
+    response = requests.post(f"{server_url}/init_map", json=device_payload, timeout=60)
     
     if response.status_code != 200:
         print(f"HTTP Error: {response.status_code}")
@@ -44,15 +65,6 @@ def test_simulation_new_architecture(server_url):
     # Should return zip file
     if response.headers.get('content-type') != 'application/zip':
         print(f"Expected zip file, got: {response.headers.get('content-type')}")
-        return False
-    
-    # Extract session_id from header
-    content_disposition = response.headers.get('content-disposition', '')
-    if 'session_' in content_disposition:
-        session_id = content_disposition.split('session_')[1].split('.')[0]
-        print(f"✓ Created session: {session_id}")
-    else:
-        print("✗ Could not extract session_id from response")
         return False
     
     # Save zip locally (simulating device behavior)
@@ -167,7 +179,7 @@ def test_simulation_new_architecture(server_url):
         client_paths_dir = Path("data/client_paths")
         client_paths_dir.mkdir(parents=True, exist_ok=True)
         
-        viz_path = client_paths_dir / f"simulation_path_{session_id[:8]}.jpg"
+        viz_path = client_paths_dir / f"simulation_path_{session_id}.jpg"
         with open(viz_path, 'wb') as f:
             f.write(viz_response.content)
         print(f"✓ Path visualization saved: {viz_path}")

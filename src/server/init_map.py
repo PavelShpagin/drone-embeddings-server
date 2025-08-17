@@ -148,7 +148,7 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
     start_time = time.time()
     session_id = str(uuid.uuid4())
     
-    print(f"Initializing map session {session_id[:8]}...")
+    print(f"Initializing map session {session_id}...")
     print(f"Location: ({lat:.6f}, {lng:.6f})")
     print(f"Coverage: {meters}m x {meters}m")
     
@@ -269,7 +269,7 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
         save_sessions_callback()
         
         elapsed_time = time.time() - start_time
-        print(f"Session {session_id[:8]} created successfully in {elapsed_time:.1f}s")
+        print(f"Session {session_id} created successfully in {elapsed_time:.1f}s")
         print(f"Map size: {full_image.shape}")
         print(f"Patches: {len(patches)}")
         print(f"Coverage: {meters}m x {meters}m")
