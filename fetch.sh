@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 
 # Default values
 DEFAULT_SERVER="http://ec2-16-171-238-14.eu-north-1.compute.amazonaws.com:5000"
-LOGS_DIR="downloaded_logs"
+LOGS_DIR="data/logs"
 
 # Functions
 print_usage() {

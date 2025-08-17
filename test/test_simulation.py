@@ -70,21 +70,39 @@ def test_simulation_new_architecture(server_url):
         print(f"Expected zip file, got: {response.headers.get('content-type')}")
         return False
     
-    # Save zip locally (simulating device behavior)
-    simulation_dir = Path("data/simulation")
-    simulation_dir.mkdir(parents=True, exist_ok=True)
+    # Save zip and extract to standard data structure
+    data_dir = Path("data")
+    maps_dir = data_dir / "maps"
+    embeddings_dir = data_dir / "embeddings"
+    zips_dir = data_dir / "zips"
     
-    zip_path = simulation_dir / f"session_{session_id}.zip"
+    # Create directories
+    for dir_path in [data_dir, maps_dir, embeddings_dir, zips_dir]:
+        dir_path.mkdir(parents=True, exist_ok=True)
+    
+    # Save zip file
+    zip_path = zips_dir / f"{session_id}.zip"
     with open(zip_path, 'wb') as f:
         f.write(response.content)
     print(f"✓ Saved session zip: {zip_path} ({len(response.content)} bytes)")
     
-    # Extract and verify zip contents
+    # Extract and store map and embeddings locally
     with zipfile.ZipFile(zip_path, 'r') as zf:
-        # Extract map and embeddings for local use
+        # Extract and save map
         map_data = zf.read('map.png')
+        map_path = maps_dir / f"{session_id}.png"
+        with open(map_path, 'wb') as f:
+            f.write(map_data)
+        
+        # Extract and save embeddings
         embeddings_data = json.loads(zf.read('embeddings.json').decode())
-        print(f"✓ Extracted map and {len(embeddings_data['patches'])} patch embeddings")
+        embeddings_path = embeddings_dir / f"{session_id}.json"
+        with open(embeddings_path, 'w') as f:
+            json.dump(embeddings_data, f)
+        
+        print(f"✓ Extracted and stored map: {map_path}")
+        print(f"✓ Extracted and stored embeddings: {embeddings_path}")
+        print(f"✓ Total patches: {len(embeddings_data['patches'])}")
     
     # Process stream frames with enhanced logging
     stream_path = Path("../device/data/stream")
@@ -172,23 +190,11 @@ def test_simulation_new_architecture(server_url):
         else:
             print("✗ Session not found in server list")
     
-    # Generate final path visualization (legacy endpoint)
-    print(f"\n5. Generating final path visualization...")
-    viz_response = requests.post(f"{server_url}/visualize_path", 
-                               json={"session_id": session_id}, timeout=30)
-    
-    if viz_response.status_code == 200:
-        # Save to client_paths directory
-        client_paths_dir = Path("data/client_paths")
-        client_paths_dir.mkdir(parents=True, exist_ok=True)
-        
-        viz_path = client_paths_dir / f"simulation_path_{session_id}.jpg"
-        with open(viz_path, 'wb') as f:
-            f.write(viz_response.content)
-        print(f"✓ Path visualization saved: {viz_path}")
-        print(f"  Image size: {len(viz_response.content)} bytes")
-    else:
-        print(f"✗ Visualization failed: {viz_response.status_code}")
+    # Note: Enhanced logging with visualizations is handled server-side
+    # Use fetch.sh to download logs: ./fetch.sh SESSION_ID LOGGER_ID
+    print(f"\n5. Enhanced logging complete on server...")
+    print(f"   Use fetch.sh to download logs:")
+    print(f"   ./fetch.sh {session_id} {logger_id}")
     
     # Summary
     print(f"\n" + "=" * 55)
