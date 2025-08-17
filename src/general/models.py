@@ -124,25 +124,3 @@ class GenerateVideoResponse(BaseModel):
     message: Optional[str] = None
     video_path: Optional[str] = None
     frame_count: Optional[int] = None
-
-class FetchLogsRequest(BaseModel):
-    session_id: str
-    logger_id: Optional[str] = None
-
-class LogsSessionInfo(BaseModel):
-    session_id: str
-    loggers: List[Dict[str, Any]]
-    logger_count: int
-
-class AvailableLogsResponse(BaseModel):
-    success: bool
-    sessions: List[LogsSessionInfo]
-    total_sessions: int
-
-class LogsSummaryResponse(BaseModel):
-    success: bool
-    session_id: Optional[str] = None
-    loggers: Optional[Dict[str, Any]] = None
-    total_size: Optional[int] = None
-    total_files: Optional[int] = None
-    message: Optional[str] = None

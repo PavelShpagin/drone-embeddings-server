@@ -26,11 +26,35 @@ sys.path.insert(0, str(Path(__file__).parent / "src" / "general"))
 from src.general.models import (
     InitMapRequest, HealthResponse, SessionInfo, SessionsResponse,
     FetchGpsRequest, FetchGpsResponse, VisualizePathRequest, VisualizePathResponse,
-    GenerateVideoRequest, GenerateVideoResponse, FetchLogsRequest,
-    AvailableLogsResponse, LogsSessionInfo, LogsSummaryResponse
+    GenerateVideoRequest, GenerateVideoResponse
 )
 from src.server.fetch_logs import package_session_logs, get_available_sessions, get_session_logs_summary
 from src.server.server_core import SatelliteEmbeddingServer
+from pydantic import BaseModel
+from typing import List, Dict, Any
+
+# Log-related models
+class FetchLogsRequest(BaseModel):
+    session_id: str
+    logger_id: Optional[str] = None
+
+class LogsSessionInfo(BaseModel):
+    session_id: str
+    loggers: List[Dict[str, Any]]
+    logger_count: int
+
+class AvailableLogsResponse(BaseModel):
+    success: bool
+    sessions: List[LogsSessionInfo]
+    total_sessions: int
+
+class LogsSummaryResponse(BaseModel):
+    success: bool
+    session_id: Optional[str] = None
+    loggers: Optional[Dict[str, Any]] = None
+    total_size: Optional[int] = None
+    total_files: Optional[int] = None
+    message: Optional[str] = None
 
 
 # Global server instance

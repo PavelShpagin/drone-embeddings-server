@@ -229,18 +229,18 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="Test new architecture device mode")
-    parser.add_argument("--remote", action="store_true", 
-                       help="Test against remote AWS server instead of localhost")
+    parser.add_argument("--local", action="store_true", 
+                       help="Test against localhost instead of remote AWS server")
     parser.add_argument("--port", type=int, default=5000,
                        help="Port number (default: 5000)")
     
     args = parser.parse_args()
     
-    if args.remote:
+    if args.local:
+        server_url = f"http://localhost:{args.port}"
+    else:
         aws_dns = "ec2-16-171-238-14.eu-north-1.compute.amazonaws.com"
         server_url = f"http://{aws_dns}:{args.port}"
-    else:
-        server_url = f"http://localhost:{args.port}"
     
     print("New Architecture Device Mode Test Suite")
     print("=" * 50)
