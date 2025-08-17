@@ -52,6 +52,9 @@ def test_simulation_new_architecture(server_url):
     
     # Now get the zip file in device mode using the full session_id
     device_payload = {
+        "lat": 50.4162,  # Required by API even though ignored when session_id is provided
+        "lng": 30.8906,
+        "meters": 1000,
         "session_id": session_id,
         "mode": "device"
     }

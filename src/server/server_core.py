@@ -399,6 +399,7 @@ class SatelliteEmbeddingServer:
         try:
             import matplotlib.pyplot as plt
             import pandas as pd
+            import numpy as np
         except ImportError as e:
             print(f"Warning: Could not import plotting libraries: {e}")
             print("Enhanced plotting disabled. Install matplotlib and pandas for full functionality.")
@@ -410,13 +411,34 @@ class SatelliteEmbeddingServer:
             if len(df) == 0:
                 return
             
+            # Ensure numeric columns
+            df['frame_num'] = pd.to_numeric(df['frame_num'], errors='coerce')
+            df['error_meters'] = pd.to_numeric(df['error_meters'], errors='coerce')
+            
+            # Remove any rows with NaN values in critical columns
+            df = df.dropna(subset=['frame_num', 'error_meters'])
+            
+            if len(df) == 0:
+                print("No valid data for plotting")
+                return
+            
             # Calculate 50-frame rolling average
-            df['error_avg_50'] = df['error_meters'].rolling(window=min(50, len(df)), center=True).mean()
+            window_size = min(50, len(df))
+            if window_size >= 1:
+                df['error_avg_50'] = df['error_meters'].rolling(window=window_size, center=True, min_periods=1).mean()
+            else:
+                df['error_avg_50'] = df['error_meters']
             
             # Create plot
             plt.figure(figsize=(12, 6))
-            plt.plot(df['frame_num'], df['error_meters'], alpha=0.3, label='Error (m)', color='red')
-            plt.plot(df['frame_num'], df['error_avg_50'], label='50-frame average', color='blue', linewidth=2)
+            
+            # Plot individual errors
+            if len(df) > 1:
+                plt.plot(df['frame_num'], df['error_meters'], alpha=0.3, label='Error (m)', color='red', marker='o', markersize=2)
+                plt.plot(df['frame_num'], df['error_avg_50'], label=f'{window_size}-frame average', color='blue', linewidth=2)
+            else:
+                plt.scatter(df['frame_num'], df['error_meters'], label='Error (m)', color='red', s=50)
+            
             plt.xlabel('Frame Number')
             plt.ylabel('Error (meters)')
             plt.title('GPS Prediction Error Over Time')
@@ -424,10 +446,17 @@ class SatelliteEmbeddingServer:
             plt.grid(True, alpha=0.3)
             
             # Add current average text
-            current_avg = df['error_avg_50'].iloc[-1] if not pd.isna(df['error_avg_50'].iloc[-1]) else df['error_meters'].mean()
-            plt.text(0.02, 0.98, f'Current 50-frame avg: {current_avg:.1f}m', 
-                    transform=plt.gca().transAxes, bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
-                    verticalalignment='top')
+            if len(df) > 0:
+                if len(df) > 1 and not df['error_avg_50'].isna().all():
+                    current_avg = df['error_avg_50'].iloc[-1]
+                    if pd.isna(current_avg):
+                        current_avg = df['error_meters'].mean()
+                else:
+                    current_avg = df['error_meters'].iloc[-1]
+                
+                plt.text(0.02, 0.98, f'Current avg: {current_avg:.1f}m', 
+                        transform=plt.gca().transAxes, bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
+                        verticalalignment='top')
             
             plt.tight_layout()
             plt.savefig(log_dir / "error_plot.png", dpi=150, bbox_inches='tight')
@@ -435,6 +464,8 @@ class SatelliteEmbeddingServer:
             
         except Exception as e:
             print(f"Error updating plot: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _update_map_visualization(self, session_id: str, log_dir: Path, g_lat: Optional[float], g_lng: Optional[float], 
                                  pred_lat: float, pred_lng: float):

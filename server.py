@@ -26,8 +26,10 @@ sys.path.insert(0, str(Path(__file__).parent / "src" / "general"))
 from src.general.models import (
     InitMapRequest, HealthResponse, SessionInfo, SessionsResponse,
     FetchGpsRequest, FetchGpsResponse, VisualizePathRequest, VisualizePathResponse,
-    GenerateVideoRequest, GenerateVideoResponse
+    GenerateVideoRequest, GenerateVideoResponse, FetchLogsRequest,
+    AvailableLogsResponse, LogsSessionInfo, LogsSummaryResponse
 )
+from src.server.fetch_logs import package_session_logs, get_available_sessions, get_session_logs_summary
 from src.server.server_core import SatelliteEmbeddingServer
 
 
@@ -200,6 +202,84 @@ async def http_get_video(request: GenerateVideoRequest):
         
     except Exception as e:
         raise HTTPException(status_code=400, detail={
+            "success": False,
+            "error": str(e)
+        })
+
+
+@app.post("/fetch_logs")
+async def http_fetch_logs(request: FetchLogsRequest):
+    """Fetch logs for a session as a zip file."""
+    try:
+        zip_data = package_session_logs(request.session_id, request.logger_id)
+        
+        if zip_data is None:
+            raise HTTPException(status_code=404, detail={
+                "success": False,
+                "error": f"No logs found for session {request.session_id}" + 
+                        (f" and logger {request.logger_id}" if request.logger_id else "")
+            })
+        
+        # Generate filename
+        if request.logger_id:
+            filename = f"logs_{request.session_id}_{request.logger_id}.zip"
+        else:
+            filename = f"logs_{request.session_id}_all.zip"
+        
+        from fastapi.responses import Response
+        return Response(
+            content=zip_data,
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={
+            "success": False,
+            "error": str(e)
+        })
+
+
+@app.get("/available_logs", response_model=AvailableLogsResponse)
+async def http_available_logs():
+    """Get information about available session logs."""
+    try:
+        logs_info = get_available_sessions()
+        
+        return AvailableLogsResponse(
+            success=True,
+            sessions=[LogsSessionInfo(**session) for session in logs_info["sessions"]],
+            total_sessions=logs_info["total_sessions"]
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={
+            "success": False,
+            "error": str(e),
+            "sessions": [],
+            "total_sessions": 0
+        })
+
+
+@app.get("/logs_summary/{session_id}", response_model=LogsSummaryResponse)
+async def http_logs_summary(session_id: str):
+    """Get detailed summary of logs for a specific session."""
+    try:
+        summary = get_session_logs_summary(session_id)
+        
+        if summary is None:
+            return LogsSummaryResponse(
+                success=False,
+                message=f"No logs found for session {session_id}"
+            )
+        
+        return LogsSummaryResponse(
+            success=True,
+            **summary
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={
             "success": False,
             "error": str(e)
         })
