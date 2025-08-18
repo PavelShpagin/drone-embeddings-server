@@ -223,8 +223,37 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
         # Keep connection alive and listen for client messages
         while True:
             try:
-                # Wait for any client messages (mostly just to detect disconnection)
-                await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
+                # Wait for any client messages (cancellation, etc.)
+                message = await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
+                try:
+                    data = json.loads(message)
+                    message_type = data.get("type")
+                    
+                    if message_type == "cancel_task":
+                        # Handle task cancellation from device
+                        cancel_task_id = data.get("task_id")
+                        if cancel_task_id in background_tasks:
+                            task = background_tasks[cancel_task_id]
+                            task.status = "cancelled"
+                            task.message = "Task cancelled by client"
+                            
+                            # Send cancellation confirmation
+                            await manager.send_progress(task_id, {
+                                "status": "cancelled",
+                                "progress": 0,
+                                "message": "Task cancelled",
+                                "task_id": cancel_task_id
+                            })
+                            
+                            # Clean up task
+                            if cancel_task_id in background_tasks:
+                                del background_tasks[cancel_task_id]
+                                
+                            print(f"🚫 Task {cancel_task_id} cancelled via WebSocket")
+                        
+                except json.JSONDecodeError:
+                    print(f"Invalid JSON received: {message}")
+                    
             except asyncio.TimeoutError:
                 # No message received, just continue
                 continue
