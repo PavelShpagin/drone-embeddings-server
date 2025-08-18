@@ -290,12 +290,10 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
             # Store session metadata
             server.sessions[session_id] = SessionMetadata(
                 session_id=session_id,
-                lat=lat,
-                lng=lng,
-                meters=meters,
                 created_at=session_data.created_at,
-                map_bounds=session_data.map_bounds,
-                patches_count=len(session_data.patches)
+                map_path=map_path,
+                embeddings_path=embeddings_path,
+                zip_path=""  # Will be set when zip is created
             )
             server.save_sessions()
         
