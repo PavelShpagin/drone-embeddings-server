@@ -108,7 +108,7 @@ def process_fetch_gps_request(
             image = image.convert('RGB')
         image_array = np.array(image)
 
-        Extract metadata from the image path if available
+        # Extract metadata from the image path if available
         metadata_dict: Dict[str, Any] = {}
         try:
             meta_path = image_path or getattr(image, 'filename', None)
