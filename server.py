@@ -257,15 +257,35 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
             os.makedirs("data/maps", exist_ok=True)
             os.makedirs("data/embeddings", exist_ok=True)
             
-            # Save map image
+            # Save map image (convert numpy array to PNG bytes)
+            from PIL import Image
+            import numpy as np
             map_path = f"data/maps/{session_id}.png"
-            with open(map_path, "wb") as f:
-                f.write(session_data.map_data)
             
-            # Save embeddings
+            # Convert numpy array to PIL Image and save
+            if session_data.full_map.dtype != np.uint8:
+                # Normalize to 0-255 if needed
+                map_array = ((session_data.full_map - session_data.full_map.min()) / 
+                           (session_data.full_map.max() - session_data.full_map.min()) * 255).astype(np.uint8)
+            else:
+                map_array = session_data.full_map
+                
+            map_image = Image.fromarray(map_array)
+            map_image.save(map_path)
+            
+            # Save embeddings (extract embeddings from patches)
             embeddings_path = f"data/embeddings/{session_id}.json"
+            embeddings_data = []
+            for patch in session_data.patches:
+                embeddings_data.append({
+                    "embedding": patch.embedding_data["embedding"].tolist() if hasattr(patch.embedding_data["embedding"], 'tolist') else patch.embedding_data["embedding"],
+                    "lat": patch.lat,
+                    "lng": patch.lng,
+                    "coords": patch.patch_coords
+                })
+            
             with open(embeddings_path, "w") as f:
-                json.dump(session_data.patch_data, f)
+                json.dump(embeddings_data, f)
             
             # Store session metadata
             server.sessions[session_id] = SessionMetadata(
@@ -275,7 +295,7 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
                 meters=meters,
                 created_at=session_data.created_at,
                 map_bounds=session_data.map_bounds,
-                patches_count=len(session_data.patch_data)
+                patches_count=len(session_data.patches)
             )
             server.save_sessions()
         
