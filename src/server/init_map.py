@@ -231,24 +231,24 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
         total_patches = len(patch_data)
         
         # Track progress updates for every 1% and every tile completion
-        last_progress_reported = 45
+        last_progress_reported = 45.0
         
         for i, (patch_array, coords) in enumerate(patch_data):
             # Update progress during embedding generation (every tile + every 1%)
             if progress_callback and total_patches > 0:
                 # Progress from 45% to 75% during embedding generation (30% range)
-                progress_ratio = i / total_patches
-                current_progress = 45 + int(progress_ratio * 30)
+                progress_ratio = (i + 1) / float(total_patches)
+                current_progress = 45.0 + (progress_ratio * 30.0)
                 
                 # Update on every tile completion OR every 1% progress change
                 should_update = (
-                    current_progress > last_progress_reported or       # Every 1% change
+                    current_progress - last_progress_reported >= 1.0 or       # Every 1% change
                     i == 0 or                                          # First patch
                     i == total_patches - 1                            # Last patch
                 )
                 
                 if should_update:
-                    progress_callback(f"Generating embeddings ({i+1}/{total_patches})...", current_progress)
+                    progress_callback(f"Generating embeddings ({i+1}/{total_patches})...", round(current_progress, 2))
                     last_progress_reported = current_progress
                     print(f"🔄 Tile {i+1}/{total_patches} completed - {current_progress}%")
                 

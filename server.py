@@ -64,7 +64,7 @@ class ProgressTask:
     def __init__(self, task_id: str):
         self.task_id = task_id
         self.status = "running"  # "running", "completed", "failed"
-        self.progress = 0  # 0-100
+        self.progress = 0.0  # 0-100, allow fractional progress for smooth UI updates
         self.message = "Starting..."
         self.zip_data = None
         self.session_id = None
@@ -73,7 +73,7 @@ class ProgressTask:
         
 class ProgressResponse(BaseModel):
     status: str
-    progress: int
+    progress: float
     message: str
     zip_data: Optional[str] = None  # Base64 encoded zip data when completed
     session_id: Optional[str] = None
