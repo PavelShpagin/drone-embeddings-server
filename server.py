@@ -303,26 +303,34 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
     """Background task for processing init_map requests with progress updates."""
     task = background_tasks[task_id]
     
-    def update_progress(progress: int, message: str):
+    loop = asyncio.get_running_loop()
+
+    def update_progress(progress: float, message: str):
         """Update task progress and send WebSocket notification."""
-        task.progress = progress
+        task.progress = float(progress)
         task.message = message
         print(f"Task {task_id}: {progress}% - {message}")
         
-        # Send WebSocket update
-        progress_data = {
+        # Prepare data once
+        progress_payload = {
             "type": "progress_update",
             "task_id": task_id,
             "status": task.status,
-            "progress": progress,
+            "progress": float(progress),
             "message": message
         }
         
-        # Use asyncio to send the WebSocket update
+        # Ensure WS send happens on the event loop thread even when called from worker threads
+        def _send():
+            asyncio.create_task(manager.send_progress(task_id, progress_payload))
         try:
-            asyncio.create_task(manager.send_progress(task_id, progress_data))
-        except Exception as e:
-            print(f"Failed to send WebSocket update: {e}")
+            loop.call_soon_threadsafe(_send)
+        except RuntimeError:
+            # Fallback in case loop not available
+            try:
+                asyncio.run_coroutine_threadsafe(manager.send_progress(task_id, progress_payload), loop)
+            except Exception as e:
+                print(f"Failed to send WebSocket update: {e}")
     
     try:
         update_progress(5, "Initializing satellite data request...")
@@ -375,16 +383,19 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
             task.progress = progress
             task.message = message
         
-        result = process_init_map_request(
-            lat=lat,
-            lng=lng, 
-            meters=meters,
-            mode="device",
-            embedder=server.embedder,
-            sessions=temp_sessions,
-            save_sessions_callback=lambda: None,
-            progress_callback=progress_wrapper
-        )
+        # Run heavy synchronous processing in a worker thread so event loop can deliver WS updates
+        def _run_processing():
+            return process_init_map_request(
+                lat=lat,
+                lng=lng, 
+                meters=meters,
+                mode="device",
+                embedder=server.embedder,
+                sessions=temp_sessions,
+                save_sessions_callback=lambda: None,
+                progress_callback=progress_wrapper
+            )
+        result = await loop.run_in_executor(None, _run_processing)
         
         # Store session data in server
         if result.get("success"):
