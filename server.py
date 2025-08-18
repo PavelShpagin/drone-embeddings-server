@@ -132,9 +132,9 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-def init_map(lat: float, lng: float, meters: int = 2000, mode: str = "server", session_id: Optional[str] = None) -> Dict[str, Any]:
+def init_map(lat: float, lng: float, meters: int = 2000, mode: str = "server", session_id: Optional[str] = None, fetch_only: bool = False) -> Dict[str, Any]:
     """Wrapper function for backward compatibility."""
-    return server.init_map(lat, lng, meters, mode, session_id)
+    return server.init_map(lat, lng, meters, mode, session_id, fetch_only)
 
 
 # FastAPI HTTP Server
@@ -218,6 +218,7 @@ async def http_init_map(
     mode: str = Form("server"),
     session_id: Optional[str] = Form(None),
     connection_id: Optional[str] = Form(None),
+    fetch_only: bool = Form(False),
     background_tasks_runner: BackgroundTasks = BackgroundTasks()
 ):
     """HTTP endpoint for initializing map sessions."""
@@ -250,7 +251,8 @@ async def http_init_map(
             lng=lng,
             meters=meters,
             mode=mode,
-            session_id=session_id
+            session_id=session_id,
+            fetch_only=fetch_only
         )
         
         # Handle zip_data response for device mode
@@ -299,7 +301,7 @@ async def get_progress(task_id: str):
     )
 
 
-async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: int, session_id: Optional[str] = None):
+async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: int, session_id: Optional[str] = None, fetch_only: bool = False):
     """Background task for processing init_map requests with progress updates."""
     task = background_tasks[task_id]
     

@@ -80,7 +80,7 @@ class SatelliteEmbeddingServer:
         """Public method to save sessions to persistent storage."""
         self._save_sessions()
     
-    def init_map(self, lat: float, lng: float, meters: int = 2000, mode: str = "server", session_id: Optional[str] = None):
+    def init_map(self, lat: float, lng: float, meters: int = 2000, mode: str = "server", session_id: Optional[str] = None, fetch_only: bool = False):
         """
         Initialize a new map session or return cached session.
         
@@ -90,6 +90,7 @@ class SatelliteEmbeddingServer:
             meters: Desired coverage in meters (default 2km)
             mode: "server" (return success) or "device" (return full data)
             session_id: Optional session ID for caching
+            fetch_only: If True, only fetch existing session (don't create new)
             
         Returns:
             Dictionary with session_id and optional map data
@@ -97,6 +98,14 @@ class SatelliteEmbeddingServer:
         # Check for cached session
         if session_id and session_id in self.sessions:
             return self._return_cached_session(session_id, mode)
+        
+        # If fetch_only and session not found, return error
+        if fetch_only:
+            return {
+                "success": False,
+                "error": f"Session {session_id} not found",
+                "session_id": session_id
+            }
         
         # Create new session
         return self._create_new_session(lat, lng, meters, mode)
