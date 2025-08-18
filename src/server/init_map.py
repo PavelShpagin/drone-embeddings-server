@@ -230,24 +230,29 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
         patches = []
         total_patches = len(patch_data)
         
-        # Track progress updates to avoid too frequent calls
+        # Track progress updates for 5% increments
         last_progress_reported = 45
+        progress_increment = max(1, total_patches // 6)  # Divide 30% range into 6 steps = 5% each
         
         for i, (patch_array, coords) in enumerate(patch_data):
-            # Update progress during embedding generation (every ~5% or significant milestone)
+            # Update progress during embedding generation (every 5% minimum)
             if progress_callback and total_patches > 0:
-                # Progress from 45% to 75% during embedding generation
-                current_progress = 45 + int((i / total_patches) * 30)
+                # Progress from 45% to 75% during embedding generation (30% range)
+                progress_ratio = i / total_patches
+                current_progress = 45 + int(progress_ratio * 30)
                 
-                # Update every 5% or on significant milestones
-                if (current_progress >= last_progress_reported + 5 or 
-                    i == 0 or                                    # First patch
-                    (i + 1) % max(1, total_patches // 10) == 0 or # Every 10% of patches
-                    i == total_patches - 1):                    # Last patch
-                    
-                    progress_callback(current_progress, f"Generating embeddings ({i+1}/{total_patches})...")
+                # Update every 5% or at key milestones
+                should_update = (
+                    current_progress >= last_progress_reported + 5 or  # Every 5%
+                    i == 0 or                                          # First patch
+                    i % progress_increment == 0 or                     # Regular intervals  
+                    i == total_patches - 1                            # Last patch
+                )
+                
+                if should_update:
+                    progress_callback(f"Generating embeddings ({i+1}/{total_patches})...", current_progress)
                     last_progress_reported = current_progress
-                    print(f"Progress update: {current_progress}% - {i+1}/{total_patches} patches")
+                    print(f"✓ Progress update: {current_progress}% - {i+1}/{total_patches} patches")
             
             # Generate representation dict from embedder
             rep = embedder.embed_patch(patch_array)

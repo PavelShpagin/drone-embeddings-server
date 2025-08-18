@@ -232,7 +232,7 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
         import json
         temp_sessions = {}
         
-        def progress_wrapper(progress, message):
+        def progress_wrapper(message, progress):
             """Wrapper to make progress callback async-compatible."""
             print(f"PROGRESS WRAPPER CALLED: {progress}% - {message}")
             update_progress(progress, message)
