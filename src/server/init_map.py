@@ -284,21 +284,51 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
         
         # Return based on mode
         if mode == "device":
+            # Create zip file with map and embeddings
+            import io
+            import zipfile
+            import json
+            from PIL import Image
+            
+            zip_buffer = io.BytesIO()
+            
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                # Save map as PNG
+                if full_image.dtype != np.uint8:
+                    # Normalize to 0-255 if needed
+                    map_array = ((full_image - full_image.min()) / 
+                               (full_image.max() - full_image.min()) * 255).astype(np.uint8)
+                else:
+                    map_array = full_image
+                
+                # Convert to PIL Image and save to bytes
+                map_image = Image.fromarray(map_array)
+                map_buffer = io.BytesIO()
+                map_image.save(map_buffer, format='PNG')
+                zf.writestr('map.png', map_buffer.getvalue())
+                
+                # Save embeddings as JSON
+                embeddings_data = [
+                    {
+                        "embedding": patch.embedding_data["embedding"].tolist(),
+                        "lat": patch.lat,
+                        "lng": patch.lng,
+                        "coords": patch.patch_coords
+                    }
+                    for patch in patches
+                ]
+                zf.writestr('embeddings.json', json.dumps(embeddings_data))
+            
+            zip_data = zip_buffer.getvalue()
+            
             return {
                 "session_id": session_id,
                 "success": True,
+                "zip_data": zip_data,
                 "map_data": {
                     "full_map": full_image.tolist(),  # Convert to serializable format
                     "map_bounds": map_bounds,
-                    "patches": [
-                        {
-                            "embedding": patch.embedding_data["embedding"].tolist(),
-                            "lat": patch.lat,
-                            "lng": patch.lng,
-                            "coords": patch.patch_coords
-                        }
-                        for patch in patches
-                    ],
+                    "patches": embeddings_data,
                     "meters_coverage": meters,
                     "patch_count": len(patches)
                 }
