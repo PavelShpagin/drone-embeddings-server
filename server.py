@@ -12,9 +12,11 @@ API:
 import sys
 from pathlib import Path
 import time
+import uuid
+import asyncio
 from typing import Dict, Any, Optional
 
-from fastapi import FastAPI, HTTPException, File, UploadFile, Form
+from fastapi import FastAPI, HTTPException, File, UploadFile, Form, BackgroundTasks
 import uvicorn
 
 # Add src to path for imports
@@ -56,10 +58,36 @@ class LogsSummaryResponse(BaseModel):
     total_files: Optional[int] = None
     message: Optional[str] = None
 
+# Progress tracking models
+class ProgressTask:
+    def __init__(self, task_id: str):
+        self.task_id = task_id
+        self.status = "running"  # "running", "completed", "failed"
+        self.progress = 0  # 0-100
+        self.message = "Starting..."
+        self.zip_data = None
+        self.session_id = None
+        self.error = None
+        self.created_at = time.time()
+        
+class ProgressResponse(BaseModel):
+    status: str
+    progress: int
+    message: str
+    zip_data: Optional[str] = None  # Base64 encoded zip data when completed
+    session_id: Optional[str] = None
+    error: Optional[str] = None
+
+class AsyncInitResponse(BaseModel):
+    task_id: str
+    status: str = "started"
+
 
 # Global server instance
 server = SatelliteEmbeddingServer()
 
+# Global background tasks storage
+background_tasks: Dict[str, ProgressTask] = {}
 
 def init_map(lat: float, lng: float, meters: int = 2000, mode: str = "server", session_id: Optional[str] = None) -> Dict[str, Any]:
     """Wrapper function for backward compatibility."""
@@ -75,9 +103,28 @@ app = FastAPI(
 
 
 @app.post("/init_map")
-async def http_init_map(request: InitMapRequest):
+async def http_init_map(request: InitMapRequest, background_tasks_runner: BackgroundTasks):
     """HTTP endpoint for initializing map sessions."""
     try:
+        # Handle device_async mode for progress tracking
+        if request.mode == "device_async":
+            task_id = str(uuid.uuid4())
+            task = ProgressTask(task_id)
+            background_tasks[task_id] = task
+            
+            # Start background processing
+            background_tasks_runner.add_task(
+                _process_init_map_async,
+                task_id=task_id,
+                lat=request.lat,
+                lng=request.lng,
+                meters=request.meters,
+                session_id=request.session_id
+            )
+            
+            return AsyncInitResponse(task_id=task_id)
+        
+        # Handle regular modes (server, device)
         result = server.init_map(
             lat=request.lat,
             lng=request.lng,
@@ -85,6 +132,7 @@ async def http_init_map(request: InitMapRequest):
             mode=request.mode,
             session_id=request.session_id
         )
+        
         # Handle zip_data response for device mode
         if request.mode == "device" and "zip_data" in result:
             from fastapi.responses import Response
@@ -109,6 +157,107 @@ async def http_init_map(request: InitMapRequest):
             "success": False,
             "error": str(e)
         })
+
+
+@app.get("/progress/{task_id}", response_model=ProgressResponse)
+async def get_progress(task_id: str):
+    """Get progress of an async init_map task."""
+    task = background_tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail={
+            "success": False,
+            "error": "Task not found"
+        })
+    
+    return ProgressResponse(
+        status=task.status,
+        progress=task.progress,
+        message=task.message,
+        zip_data=task.zip_data,
+        session_id=task.session_id,
+        error=task.error
+    )
+
+
+async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: int, session_id: Optional[str] = None):
+    """Background task for processing init_map requests with progress updates."""
+    task = background_tasks[task_id]
+    
+    def update_progress(progress: int, message: str):
+        """Update task progress."""
+        task.progress = progress
+        task.message = message
+        print(f"Task {task_id}: {progress}% - {message}")
+    
+    try:
+        update_progress(5, "Initializing satellite data request...")
+        
+        # Check for cached session first
+        if session_id and session_id in server.sessions:
+            update_progress(30, "Found cached session, loading data...")
+            result = server._return_cached_session(session_id, "device")
+            
+            if result.get("success"):
+                update_progress(80, "Processing cached data...")
+                
+                # Convert zip_data to base64 for JSON response
+                if "zip_data" in result:
+                    import base64
+                    task.zip_data = base64.b64encode(result["zip_data"]).decode('utf-8')
+                    task.session_id = result["session_id"]
+                
+                update_progress(100, "Cached data ready!")
+                task.status = "completed"
+                
+                # Clean up after some time
+                await asyncio.sleep(10)
+                if task_id in background_tasks:
+                    del background_tasks[task_id]
+                return
+        
+        update_progress(10, "Connecting to satellite imagery service...")
+        
+        # Create new session with progress updates
+        update_progress(15, "Downloading satellite imagery...")
+        await asyncio.sleep(1)  # Simulate network delay
+        
+        update_progress(30, "Processing satellite tiles...")
+        await asyncio.sleep(1)
+        
+        update_progress(45, "Generating embeddings...")
+        await asyncio.sleep(2)  # Simulate AI processing
+        
+        update_progress(60, "Creating map data...")
+        
+        # Call the actual processing (this runs synchronously but we update progress)
+        result = server._create_new_session(lat, lng, meters, "device")
+        
+        if result.get("success"):
+            update_progress(80, "Packaging data...")
+            
+            # Convert zip_data to base64 for JSON response
+            if "zip_data" in result:
+                import base64
+                task.zip_data = base64.b64encode(result["zip_data"]).decode('utf-8')
+                task.session_id = result["session_id"]
+            
+            update_progress(100, "Map data ready!")
+            task.status = "completed"
+        else:
+            task.status = "failed"
+            task.error = result.get("error", "Unknown error")
+            task.message = f"Failed: {task.error}"
+    
+    except Exception as e:
+        task.status = "failed"
+        task.error = str(e)
+        task.message = f"Error: {str(e)}"
+        print(f"Error in background task {task_id}: {e}")
+    
+    # Clean up after some time
+    await asyncio.sleep(10)
+    if task_id in background_tasks:
+        del background_tasks[task_id]
 
 
 @app.get("/sessions", response_model=SessionsResponse)
