@@ -25,7 +25,7 @@ import json
 import math
 import traceback
 from retry import retry
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional, Union, Callable
 import concurrent.futures
 import threading
 import time
@@ -109,8 +109,18 @@ class GEESampler:
             placeholder = Image.new('RGB', (patch_width, patch_height), (128, 64, 64))
             return tile_idx, placeholder
     
-    def _download_tiles_parallel(self, image: ee.Image, regions: list, patch_width: int, patch_height: int, max_workers: int = 10) -> list:
-        """Download multiple tiles in parallel for 10x speed improvement."""
+    def _download_tiles_parallel(
+        self,
+        image: ee.Image,
+        regions: list,
+        patch_width: int,
+        patch_height: int,
+        max_workers: int = 10,
+        progress_callback: Optional[Callable[[float, str], None]] = None,
+        progress_start: float = 10.0,
+        progress_end: float = 30.0,
+    ) -> list:
+        """Download multiple tiles in parallel for 10x speed improvement with progress updates."""
         print(f"Downloading {len(regions)} tiles in parallel (max {max_workers} workers)...")
         start_time = time.time()
         
@@ -119,6 +129,10 @@ class GEESampler:
         
         # Download tiles in parallel
         tiles = [None] * len(regions)
+        total = len(regions) if regions else 1
+        completed = 0
+        if progress_callback:
+            progress_callback(progress_start, f"Downloading tiles (0/{total})...")
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all download tasks
             future_to_idx = {
@@ -131,6 +145,11 @@ class GEESampler:
                 try:
                     tile_idx, tile = future.result()
                     tiles[tile_idx] = tile
+                    completed += 1
+                    if progress_callback:
+                        frac = completed / float(total)
+                        prog = progress_start + frac * (progress_end - progress_start)
+                        progress_callback(round(prog, 2), f"Downloading tiles ({completed}/{total})...")
                 except Exception as e:
                     tile_idx = future_to_idx[future]
                     print(f"   Parallel tile {tile_idx + 1} failed: {e}")
@@ -138,6 +157,8 @@ class GEESampler:
         
         elapsed_time = time.time() - start_time
         print(f"Parallel download completed in {elapsed_time:.1f}s (vs ~{elapsed_time*10:.1f}s sequential)")
+        if progress_callback:
+            progress_callback(progress_end, "Tiles downloaded")
         return tiles
     
     def _calculate_coverage_from_pixels(
@@ -181,7 +202,10 @@ class GEESampler:
         lat: float,
         lng: float,
         grid_size: Tuple[int, int] = (4, 4),
-        patch_pixels: Tuple[int, int] = (128, 128)
+        patch_pixels: Tuple[int, int] = (128, 128),
+        progress_callback: Optional[Callable[[float, str], None]] = None,
+        progress_start: float = 10.0,
+        progress_end: float = 30.0,
     ) -> Image.Image:
         """
         Sample a satellite image with specified grid and patch dimensions.
@@ -249,7 +273,16 @@ class GEESampler:
                 tile_regions.append(tile_region)
         
         # Download tiles in parallel for 10x speed improvement
-        tiles = self._download_tiles_parallel(visualized_image, tile_regions, patch_width, patch_height)
+        tiles = self._download_tiles_parallel(
+            visualized_image,
+            tile_regions,
+            patch_width,
+            patch_height,
+            max_workers=10,
+            progress_callback=progress_callback,
+            progress_start=progress_start,
+            progress_end=progress_end,
+        )
         
         # Stitch tiles into final image
         final_width = cols * patch_width
@@ -268,6 +301,8 @@ class GEESampler:
         # Return image directly without saving
         print(f"Image ready: {final_image.size}")
         
+        if progress_callback:
+            progress_callback(progress_end, "Satellite tiles stitched")
         return final_image
 
 # Convenience function for direct usage
@@ -275,7 +310,10 @@ def sample_satellite_image(
     lat: float,
     lng: float,
     grid_size: Tuple[int, int] = (4, 4),
-    patch_pixels: Tuple[int, int] = (128, 128)
+    patch_pixels: Tuple[int, int] = (128, 128),
+    progress_callback: Optional[Callable[[float, str], None]] = None,
+    progress_start: float = 10.0,
+    progress_end: float = 30.0,
 ) -> Image.Image:
     """
     Convenience function to sample satellite imagery without class instantiation.
@@ -290,4 +328,12 @@ def sample_satellite_image(
         PIL Image object
     """
     sampler = GEESampler()
-    return sampler.sample_image(lat, lng, grid_size, patch_pixels)
+    return sampler.sample_image(
+        lat,
+        lng,
+        grid_size,
+        patch_pixels,
+        progress_callback=progress_callback,
+        progress_start=progress_start,
+        progress_end=progress_end,
+    )

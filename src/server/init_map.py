@@ -164,7 +164,10 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
                 lat=lat,
                 lng=lng,
                 grid_size=(grid_rows, grid_cols),
-                patch_pixels=(128, 128)  # High resolution patches
+                patch_pixels=(128, 128),  # High resolution patches
+                progress_callback=(lambda p, m: progress_callback(m, p) if progress_callback else None),
+                progress_start=10.0,
+                progress_end=30.0,
             )
         except Exception as gee_error:
             print(f"GEE sampling failed: {gee_error}. Falling back to local research/data image or synthetic map.")
