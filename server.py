@@ -14,9 +14,10 @@ from pathlib import Path
 import time
 import uuid
 import asyncio
+import json
 from typing import Dict, Any, Optional
 
-from fastapi import FastAPI, HTTPException, File, UploadFile, Form, BackgroundTasks
+from fastapi import FastAPI, HTTPException, File, UploadFile, Form, BackgroundTasks, WebSocket, WebSocketDisconnect
 import uvicorn
 
 # Add src to path for imports
@@ -88,6 +89,32 @@ server = SatelliteEmbeddingServer()
 
 # Global background tasks storage
 background_tasks: Dict[str, ProgressTask] = {}
+
+# WebSocket connection management
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+    
+    async def connect(self, websocket: WebSocket, task_id: str):
+        await websocket.accept()
+        self.active_connections[task_id] = websocket
+        print(f"✓ WebSocket connected for task {task_id}")
+    
+    def disconnect(self, task_id: str):
+        if task_id in self.active_connections:
+            del self.active_connections[task_id]
+            print(f"✗ WebSocket disconnected for task {task_id}")
+    
+    async def send_progress(self, task_id: str, progress_data: dict):
+        if task_id in self.active_connections:
+            try:
+                await self.active_connections[task_id].send_text(json.dumps(progress_data))
+                print(f"📡 Sent progress to {task_id}: {progress_data['progress']}% - {progress_data['message']}")
+            except Exception as e:
+                print(f"❌ Error sending progress to {task_id}: {e}")
+                self.disconnect(task_id)
+
+manager = ConnectionManager()
 
 def init_map(lat: float, lng: float, meters: int = 2000, mode: str = "server", session_id: Optional[str] = None) -> Dict[str, Any]:
     """Wrapper function for backward compatibility."""
@@ -179,15 +206,60 @@ async def get_progress(task_id: str):
     )
 
 
+@app.websocket("/ws/{task_id}")
+async def websocket_endpoint(websocket: WebSocket, task_id: str):
+    """WebSocket endpoint for real-time progress updates."""
+    try:
+        await manager.connect(websocket, task_id)
+        
+        # Send initial connection confirmation
+        await manager.send_progress(task_id, {
+            "status": "connected",
+            "progress": 0,
+            "message": "WebSocket connected - waiting for task to start...",
+            "task_id": task_id
+        })
+        
+        # Keep connection alive and listen for client messages
+        while True:
+            try:
+                # Wait for any client messages (mostly just to detect disconnection)
+                await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
+            except asyncio.TimeoutError:
+                # No message received, just continue
+                continue
+            except WebSocketDisconnect:
+                break
+                
+    except WebSocketDisconnect:
+        pass
+    finally:
+        manager.disconnect(task_id)
+
+
 async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: int, session_id: Optional[str] = None):
     """Background task for processing init_map requests with progress updates."""
     task = background_tasks[task_id]
     
     def update_progress(progress: int, message: str):
-        """Update task progress."""
+        """Update task progress and send WebSocket notification."""
         task.progress = progress
         task.message = message
         print(f"Task {task_id}: {progress}% - {message}")
+        
+        # Send WebSocket update
+        progress_data = {
+            "status": task.status,
+            "progress": progress,
+            "message": message,
+            "task_id": task_id
+        }
+        
+        # Use asyncio to send the WebSocket update
+        try:
+            asyncio.create_task(manager.send_progress(task_id, progress_data))
+        except Exception as e:
+            print(f"Failed to send WebSocket update: {e}")
     
     try:
         update_progress(5, "Initializing satellite data request...")
@@ -208,6 +280,16 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
                 
                 update_progress(100, "Cached data ready!")
                 task.status = "completed"
+                
+                # Send final WebSocket notification with completion data
+                await manager.send_progress(task_id, {
+                    "status": "completed",
+                    "progress": 100,
+                    "message": "Cached data ready!",
+                    "task_id": task_id,
+                    "zip_data": task.zip_data,
+                    "session_id": task.session_id
+                })
                 
                 # Clean up after some time
                 await asyncio.sleep(10)
@@ -312,6 +394,16 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
             
             update_progress(100, "Map data ready!")
             task.status = "completed"
+            
+            # Send final WebSocket notification with completion data
+            await manager.send_progress(task_id, {
+                "status": "completed",
+                "progress": 100,
+                "message": "Map data ready!",
+                "task_id": task_id,
+                "zip_data": task.zip_data,
+                "session_id": task.session_id
+            })
         else:
             task.status = "failed"
             task.error = result.get("error", "Unknown error")
