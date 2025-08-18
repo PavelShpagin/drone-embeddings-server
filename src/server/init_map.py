@@ -5,6 +5,8 @@ Handles satellite image fetching, processing, and embedding generation.
 """
 
 import uuid
+import secrets
+import string
 import numpy as np
 import time
 import math
@@ -146,7 +148,11 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
         Dictionary with session_id and optional map data
     """
     start_time = time.time()
-    session_id = str(uuid.uuid4())
+    # Generate 8-char session id
+    def _gen_session_id(length: int = 8) -> str:
+        alphabet = string.ascii_lowercase + string.digits
+        return ''.join(secrets.choice(alphabet) for _ in range(length))
+    session_id = _gen_session_id(8)
     
     print(f"Initializing map session {session_id}...")
     print(f"Location: ({lat:.6f}, {lng:.6f})")
