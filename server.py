@@ -94,25 +94,41 @@ background_tasks: Dict[str, ProgressTask] = {}
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
+        self.task_connections: Dict[str, str] = {}  # task_id -> connection_id mapping
     
-    async def connect(self, websocket: WebSocket, task_id: str):
+    async def connect(self, websocket: WebSocket, connection_id: str):
         await websocket.accept()
-        self.active_connections[task_id] = websocket
-        print(f"✓ WebSocket connected for task {task_id}")
+        self.active_connections[connection_id] = websocket
+        print(f"✓ WebSocket connected: {connection_id}")
     
-    def disconnect(self, task_id: str):
-        if task_id in self.active_connections:
-            del self.active_connections[task_id]
-            print(f"✗ WebSocket disconnected for task {task_id}")
+    def disconnect(self, connection_id: str):
+        if connection_id in self.active_connections:
+            del self.active_connections[connection_id]
+        # Remove from task mapping
+        for task_id, conn_id in list(self.task_connections.items()):
+            if conn_id == connection_id:
+                del self.task_connections[task_id]
+        print(f"✗ WebSocket disconnected: {connection_id}")
+    
+    def register_task(self, task_id: str, connection_id: str):
+        """Register a task with a WebSocket connection."""
+        self.task_connections[task_id] = connection_id
+        print(f"📋 Task {task_id} registered with connection {connection_id}")
     
     async def send_progress(self, task_id: str, progress_data: dict):
-        if task_id in self.active_connections:
+        """Send progress update to the WebSocket connection for this task."""
+        connection_id = self.task_connections.get(task_id)
+        if connection_id and connection_id in self.active_connections:
             try:
-                await self.active_connections[task_id].send_text(json.dumps(progress_data))
-                print(f"📡 Sent progress to {task_id}: {progress_data['progress']}% - {progress_data['message']}")
+                websocket = self.active_connections[connection_id]
+                await websocket.send_text(json.dumps(progress_data))
+                print(f"📡 Sent to {connection_id}: {progress_data['progress']}% - {progress_data['message']}")
+                return True
             except Exception as e:
-                print(f"❌ Error sending progress to {task_id}: {e}")
-                self.disconnect(task_id)
+                print(f"❌ Error sending progress to {connection_id}: {e}")
+                self.disconnect(connection_id)
+                return False
+        return False
 
 manager = ConnectionManager()
 
@@ -129,39 +145,116 @@ app = FastAPI(
 )
 
 
+@app.websocket("/ws/{connection_id}")
+async def websocket_endpoint(websocket: WebSocket, connection_id: str):
+    """WebSocket endpoint for real-time progress updates."""
+    try:
+        await manager.connect(websocket, connection_id)
+        
+        # Send initial connection confirmation
+        await websocket.send_text(json.dumps({
+            "type": "connection_confirmed",
+            "connection_id": connection_id,
+            "message": "WebSocket connected successfully"
+        }))
+        
+        # Keep connection alive and listen for client messages
+        while True:
+            try:
+                # Wait for client messages (cancellation, etc.)
+                message = await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
+                try:
+                    data = json.loads(message)
+                    message_type = data.get("type")
+                    
+                    if message_type == "cancel_task":
+                        # Handle task cancellation from device
+                        task_id = data.get("task_id")
+                        if task_id in background_tasks:
+                            task = background_tasks[task_id]
+                            task.status = "cancelled"
+                            task.message = "Task cancelled by client"
+                            
+                            # Send cancellation confirmation
+                            await websocket.send_text(json.dumps({
+                                "type": "task_cancelled",
+                                "task_id": task_id,
+                                "message": "Task cancelled successfully"
+                            }))
+                            
+                            print(f"🚫 Task {task_id} cancelled via WebSocket")
+                    
+                    elif message_type == "register_task":
+                        # Register task with this connection
+                        task_id = data.get("task_id")
+                        if task_id:
+                            manager.register_task(task_id, connection_id)
+                            await websocket.send_text(json.dumps({
+                                "type": "task_registered",
+                                "task_id": task_id,
+                                "message": "Task registered for real-time updates"
+                            }))
+                        
+                except json.JSONDecodeError:
+                    print(f"Invalid JSON received: {message}")
+                    
+            except asyncio.TimeoutError:
+                # No message received, continue
+                continue
+            except WebSocketDisconnect:
+                break
+                
+    except WebSocketDisconnect:
+        pass
+    finally:
+        manager.disconnect(connection_id)
+
+
 @app.post("/init_map")
-async def http_init_map(request: InitMapRequest, background_tasks_runner: BackgroundTasks):
+async def http_init_map(
+    lat: float = Form(...),
+    lng: float = Form(...),
+    meters: int = Form(2000),
+    mode: str = Form("server"),
+    session_id: Optional[str] = Form(None),
+    connection_id: Optional[str] = Form(None),
+    background_tasks_runner: BackgroundTasks = BackgroundTasks()
+):
     """HTTP endpoint for initializing map sessions."""
     try:
         # Handle device_async mode for progress tracking
-        if request.mode == "device_async":
+        if mode == "device_async":
             task_id = str(uuid.uuid4())
             task = ProgressTask(task_id)
             background_tasks[task_id] = task
+            
+            # Register task with WebSocket connection if provided
+            if connection_id:
+                manager.register_task(task_id, connection_id)
             
             # Start background processing
             background_tasks_runner.add_task(
                 _process_init_map_async,
                 task_id=task_id,
-                lat=request.lat,
-                lng=request.lng,
-                meters=request.meters,
-                session_id=request.session_id
+                lat=lat,
+                lng=lng,
+                meters=meters,
+                session_id=session_id
             )
             
             return AsyncInitResponse(task_id=task_id)
         
         # Handle regular modes (server, device)
         result = server.init_map(
-            lat=request.lat,
-            lng=request.lng,
-            meters=request.meters,
-            mode=request.mode,
-            session_id=request.session_id
+            lat=lat,
+            lng=lng,
+            meters=meters,
+            mode=mode,
+            session_id=session_id
         )
         
         # Handle zip_data response for device mode
-        if request.mode == "device" and "zip_data" in result:
+        if mode == "device" and "zip_data" in result:
             from fastapi.responses import Response
             return Response(
                 content=result["zip_data"], 
@@ -206,66 +299,6 @@ async def get_progress(task_id: str):
     )
 
 
-@app.websocket("/ws/{task_id}")
-async def websocket_endpoint(websocket: WebSocket, task_id: str):
-    """WebSocket endpoint for real-time progress updates."""
-    try:
-        await manager.connect(websocket, task_id)
-        
-        # Send initial connection confirmation
-        await manager.send_progress(task_id, {
-            "status": "connected",
-            "progress": 0,
-            "message": "WebSocket connected - waiting for task to start...",
-            "task_id": task_id
-        })
-        
-        # Keep connection alive and listen for client messages
-        while True:
-            try:
-                # Wait for any client messages (cancellation, etc.)
-                message = await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
-                try:
-                    data = json.loads(message)
-                    message_type = data.get("type")
-                    
-                    if message_type == "cancel_task":
-                        # Handle task cancellation from device
-                        cancel_task_id = data.get("task_id")
-                        if cancel_task_id in background_tasks:
-                            task = background_tasks[cancel_task_id]
-                            task.status = "cancelled"
-                            task.message = "Task cancelled by client"
-                            
-                            # Send cancellation confirmation
-                            await manager.send_progress(task_id, {
-                                "status": "cancelled",
-                                "progress": 0,
-                                "message": "Task cancelled",
-                                "task_id": cancel_task_id
-                            })
-                            
-                            # Clean up task
-                            if cancel_task_id in background_tasks:
-                                del background_tasks[cancel_task_id]
-                                
-                            print(f"🚫 Task {cancel_task_id} cancelled via WebSocket")
-                        
-                except json.JSONDecodeError:
-                    print(f"Invalid JSON received: {message}")
-                    
-            except asyncio.TimeoutError:
-                # No message received, just continue
-                continue
-            except WebSocketDisconnect:
-                break
-                
-    except WebSocketDisconnect:
-        pass
-    finally:
-        manager.disconnect(task_id)
-
-
 async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: int, session_id: Optional[str] = None):
     """Background task for processing init_map requests with progress updates."""
     task = background_tasks[task_id]
@@ -278,10 +311,11 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
         
         # Send WebSocket update
         progress_data = {
+            "type": "progress_update",
+            "task_id": task_id,
             "status": task.status,
             "progress": progress,
-            "message": message,
-            "task_id": task_id
+            "message": message
         }
         
         # Use asyncio to send the WebSocket update
@@ -309,16 +343,6 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
                 
                 update_progress(100, "Cached data ready!")
                 task.status = "completed"
-                
-                # Send final WebSocket notification with completion data
-                await manager.send_progress(task_id, {
-                    "status": "completed",
-                    "progress": 100,
-                    "message": "Cached data ready!",
-                    "task_id": task_id,
-                    "zip_data": task.zip_data,
-                    "session_id": task.session_id
-                })
                 
                 # Clean up after some time
                 await asyncio.sleep(10)
@@ -423,16 +447,6 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
             
             update_progress(100, "Map data ready!")
             task.status = "completed"
-            
-            # Send final WebSocket notification with completion data
-            await manager.send_progress(task_id, {
-                "status": "completed",
-                "progress": 100,
-                "message": "Map data ready!",
-                "task_id": task_id,
-                "zip_data": task.zip_data,
-                "session_id": task.session_id
-            })
         else:
             task.status = "failed"
             task.error = result.get("error", "Unknown error")
