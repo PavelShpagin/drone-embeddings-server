@@ -234,7 +234,11 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
         
         def progress_wrapper(progress, message):
             """Wrapper to make progress callback async-compatible."""
+            print(f"PROGRESS WRAPPER CALLED: {progress}% - {message}")
             update_progress(progress, message)
+            # Force immediate update to task object
+            task.progress = progress
+            task.message = message
         
         result = process_init_map_request(
             lat=lat,
