@@ -172,8 +172,8 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
                 grid_size=(grid_rows, grid_cols),
                 patch_pixels=(128, 128),  # High resolution patches
                 progress_callback=(lambda p, m: progress_callback(m, p) if progress_callback else None),
-                progress_start=10.0,
-                progress_end=30.0,
+                progress_start=5.0,   # Prepare/tiles start
+                progress_end=40.0,    # Tiles done
             )
         except Exception as gee_error:
             print(f"GEE sampling failed: {gee_error}. Falling back to local research/data image or synthetic map.")
@@ -239,15 +239,15 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
         patches = []
         total_patches = len(patch_data)
         
-        # Track progress updates for every 1% and every tile completion
-        last_progress_reported = 45.0
+        # Track progress updates for every 1% and every tile completion (embeddings phase)
+        last_progress_reported = 55.0
         
         for i, (patch_array, coords) in enumerate(patch_data):
             # Update progress during embedding generation (every tile + every 1%)
             if progress_callback and total_patches > 0:
-                # Progress from 45% to 75% during embedding generation (30% range)
+                # Progress from 55% to 95% during embedding generation (40% range)
                 progress_ratio = (i + 1) / float(total_patches)
-                current_progress = 45.0 + (progress_ratio * 30.0)
+                current_progress = 55.0 + (progress_ratio * 40.0)
                 
                 # Update on every tile completion OR every 1% progress change
                 should_update = (
