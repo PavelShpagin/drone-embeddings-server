@@ -225,12 +225,59 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
         await asyncio.sleep(1)
         
         update_progress(45, "Generating embeddings...")
-        await asyncio.sleep(2)  # Simulate AI processing
         
-        update_progress(60, "Creating map data...")
+        # Call the actual processing with progress callback
+        from server.init_map import process_init_map_request
+        from general.models import SessionMetadata
+        import json
+        temp_sessions = {}
         
-        # Call the actual processing (this runs synchronously but we update progress)
-        result = server._create_new_session(lat, lng, meters, "device")
+        def progress_wrapper(progress, message):
+            """Wrapper to make progress callback async-compatible."""
+            update_progress(progress, message)
+        
+        result = process_init_map_request(
+            lat=lat,
+            lng=lng, 
+            meters=meters,
+            mode="device",
+            embedder=server.embedder,
+            sessions=temp_sessions,
+            save_sessions_callback=lambda: None,
+            progress_callback=progress_wrapper
+        )
+        
+        # Store session data in server
+        if result.get("success"):
+            session_id = result["session_id"]
+            session_data = temp_sessions[session_id]
+            
+            # Store files in server storage
+            import os
+            os.makedirs("data/maps", exist_ok=True)
+            os.makedirs("data/embeddings", exist_ok=True)
+            
+            # Save map image
+            map_path = f"data/maps/{session_id}.png"
+            with open(map_path, "wb") as f:
+                f.write(session_data.map_data)
+            
+            # Save embeddings
+            embeddings_path = f"data/embeddings/{session_id}.json"
+            with open(embeddings_path, "w") as f:
+                json.dump(session_data.patch_data, f)
+            
+            # Store session metadata
+            server.sessions[session_id] = SessionMetadata(
+                session_id=session_id,
+                lat=lat,
+                lng=lng,
+                meters=meters,
+                created_at=session_data.created_at,
+                map_bounds=session_data.map_bounds,
+                patches_count=len(session_data.patch_data)
+            )
+            server.save_sessions()
         
         if result.get("success"):
             update_progress(80, "Packaging data...")

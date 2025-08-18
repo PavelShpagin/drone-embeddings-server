@@ -138,7 +138,8 @@ class SatelliteEmbeddingServer:
             mode="device",  # Always get full data for storage
             embedder=self.embedder,
             sessions=temp_sessions,
-            save_sessions_callback=lambda: None  # No-op for temp
+            save_sessions_callback=lambda: None,  # No-op for temp
+            progress_callback=None  # No progress callback for direct calls
         )
         
         if not result.get("success"):
