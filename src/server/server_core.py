@@ -76,6 +76,10 @@ class SatelliteEmbeddingServer:
         except Exception as e:
             print(f"Save error: {e}")
     
+    def save_sessions(self):
+        """Public method to save sessions to persistent storage."""
+        self._save_sessions()
+    
     def init_map(self, lat: float, lng: float, meters: int = 2000, mode: str = "server", session_id: Optional[str] = None):
         """
         Initialize a new map session or return cached session.
