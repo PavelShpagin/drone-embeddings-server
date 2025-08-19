@@ -189,3 +189,4 @@ def get_session_logs_summary(session_id: str) -> Optional[Dict[str, Any]]:
             summary["total_files"] += len(logger_files)
     
     return summary
+
