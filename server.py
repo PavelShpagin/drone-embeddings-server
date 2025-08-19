@@ -223,6 +223,10 @@ async def http_init_map(
 ):
     """HTTP endpoint for initializing map sessions."""
     try:
+        # Convert empty session_id to None
+        if session_id == "":
+            session_id = None
+            
         # Handle device_async mode for progress tracking
         if mode == "device_async":
             task_id = str(uuid.uuid4())
