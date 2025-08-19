@@ -95,27 +95,28 @@ class SatelliteEmbeddingServer:
         Returns:
             Dictionary with session_id and optional map data
         """
-        # Check for cached session
-        if session_id and session_id in self.sessions:
-            return self._return_cached_session(session_id, mode)
-        
-        # If session_id is provided but not found, return error (regardless of fetch_only)
+        # If session_id provided, check cache
         if session_id:
-            return {
-                "success": False,
-                "error": f"Session {session_id} not found",
-                "session_id": session_id
-            }
+            if session_id in self.sessions:
+                return self._return_cached_session(session_id, mode)
+            else:
+                # Session_id provided but not found - return error
+                return {
+                    "success": False,
+                    "error": f"Session {session_id} not found",
+                    "session_id": session_id
+                }
         
-        # If fetch_only but no session_id provided, return error
+        # No session_id provided
         if fetch_only:
+            # fetch_only but no session_id - error
             return {
                 "success": False,
                 "error": "Session ID required for fetch operation",
                 "session_id": None
             }
         
-        # Create new session (only when no session_id is provided)
+        # No session_id, not fetch_only - create new session
         return self._create_new_session(lat, lng, meters, mode)
     
     def _return_cached_session(self, session_id: str, mode: str):
