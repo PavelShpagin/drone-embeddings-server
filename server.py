@@ -338,7 +338,40 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
     try:
         update_progress(5, "Initializing satellite data request...")
         
-        # Check for cached session first
+        # If fetch_only mode, only check for cached session
+        if fetch_only:
+            if session_id and session_id in server.sessions:
+                update_progress(30, "Found cached session, loading data...")
+                result = server._return_cached_session(session_id, "device")
+                
+                if result.get("success"):
+                    update_progress(80, "Processing cached data...")
+                    
+                    # Convert zip_data to base64 for JSON response
+                    if "zip_data" in result:
+                        import base64
+                        task.zip_data = base64.b64encode(result["zip_data"]).decode('utf-8')
+                        task.session_id = result["session_id"]
+                    
+                    update_progress(100, "Cached data ready!")
+                    task.status = "completed"
+                    
+                    # Clean up after some time
+                    await asyncio.sleep(10)
+                    if task_id in background_tasks:
+                        del background_tasks[task_id]
+                    return
+            
+            # Session not found in fetch_only mode - return error immediately
+            update_progress(100, "Session not found")
+            task.status = "error"
+            task.error = f"Session {session_id} not found"
+            await asyncio.sleep(1)  # Brief delay for UI
+            if task_id in background_tasks:
+                del background_tasks[task_id]
+            return
+        
+        # Check for cached session first (for regular mode)
         if session_id and session_id in server.sessions:
             update_progress(30, "Found cached session, loading data...")
             result = server._return_cached_session(session_id, "device")
@@ -360,16 +393,6 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
                 if task_id in background_tasks:
                     del background_tasks[task_id]
                 return
-        
-        # If fetch_only and session not found, return error
-        if fetch_only:
-            update_progress(100, "Session not found")
-            task.status = "error"
-            task.error = f"Session {session_id} not found"
-            await asyncio.sleep(1)  # Brief delay for UI
-            if task_id in background_tasks:
-                del background_tasks[task_id]
-            return
         
         update_progress(10, "Connecting to satellite imagery service...")
         
