@@ -360,15 +360,13 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
                 if task_id in background_tasks:
                     del background_tasks[task_id]
                 return
-        
-        # If fetch_only and session not found, return error
-        if fetch_only:
-            update_progress(0, f"Session {session_id} not found")
-            task.status = "completed"
+        # If fetch_only is requested and no cached session exists, fail fast
+        if fetch_only and session_id:
+            task.status = "failed"
             task.error = f"Session {session_id} not found"
-            
-            # Clean up after some time
-            await asyncio.sleep(3)
+            update_progress(100, "Session not found")
+            # brief cleanup delay to allow client to process
+            await asyncio.sleep(2)
             if task_id in background_tasks:
                 del background_tasks[task_id]
             return
