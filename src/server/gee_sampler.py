@@ -146,7 +146,7 @@ class GEESampler:
                     tile_idx, tile = future.result()
                     tiles[tile_idx] = tile
                     completed += 1
-                    if progress_callback:
+                    if progress_callback and total > 0:
                         frac = completed / float(total)
                         prog = progress_start + frac * (progress_end - progress_start)
                         progress_callback(round(prog, 2), f"Downloading tiles ({completed}/{total})...")
@@ -251,6 +251,8 @@ class GEESampler:
         min_lng = lng - lng_delta
         max_lng = lng + lng_delta
         
+        if rows <= 0 or cols <= 0:
+            raise ValueError(f"Invalid grid dimensions: rows={rows}, cols={cols}")
         tile_lat_step = (max_lat - min_lat) / rows
         tile_lng_step = (max_lng - min_lng) / cols
         
