@@ -338,61 +338,41 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
     try:
         update_progress(5, "Initializing satellite data request...")
         
-        # If fetch_only mode, only check for cached session
-        if fetch_only:
-            if session_id and session_id in server.sessions:
-                update_progress(30, "Found cached session, loading data...")
-                result = server._return_cached_session(session_id, "device")
-                
-                if result.get("success"):
-                    update_progress(80, "Processing cached data...")
-                    
-                    # Convert zip_data to base64 for JSON response
-                    if "zip_data" in result:
-                        import base64
-                        task.zip_data = base64.b64encode(result["zip_data"]).decode('utf-8')
-                        task.session_id = result["session_id"]
-                    
-                    update_progress(100, "Cached data ready!")
-                    task.status = "completed"
-                    
-                    # Clean up after some time
-                    await asyncio.sleep(10)
-                    if task_id in background_tasks:
-                        del background_tasks[task_id]
-                    return
-            
-            # Session not found in fetch_only mode - return error immediately
-            update_progress(100, "Session not found")
+        # Use the server's init_map logic to handle session validation
+        initial_result = server.init_map(
+            lat=lat, lng=lng, meters=meters, mode="device", 
+            session_id=session_id, fetch_only=fetch_only
+        )
+        
+        # If server returned an error (session not found), propagate it
+        if not initial_result.get("success"):
+            update_progress(100, initial_result.get("error", "Session not found"))
             task.status = "error"
-            task.error = f"Session {session_id} not found"
+            task.error = initial_result.get("error", "Session not found")
             await asyncio.sleep(1)  # Brief delay for UI
             if task_id in background_tasks:
                 del background_tasks[task_id]
             return
         
-        # Check for cached session first (for regular mode)
-        if session_id and session_id in server.sessions:
+        # If we got a cached session successfully
+        if initial_result.get("cached"):
             update_progress(30, "Found cached session, loading data...")
-            result = server._return_cached_session(session_id, "device")
+            update_progress(80, "Processing cached data...")
             
-            if result.get("success"):
-                update_progress(80, "Processing cached data...")
-                
-                # Convert zip_data to base64 for JSON response
-                if "zip_data" in result:
-                    import base64
-                    task.zip_data = base64.b64encode(result["zip_data"]).decode('utf-8')
-                    task.session_id = result["session_id"]
-                
-                update_progress(100, "Cached data ready!")
-                task.status = "completed"
-                
-                # Clean up after some time
-                await asyncio.sleep(10)
-                if task_id in background_tasks:
-                    del background_tasks[task_id]
-                return
+            # Convert zip_data to base64 for JSON response
+            if "zip_data" in initial_result:
+                import base64
+                task.zip_data = base64.b64encode(initial_result["zip_data"]).decode('utf-8')
+                task.session_id = initial_result["session_id"]
+            
+            update_progress(100, "Cached data ready!")
+            task.status = "completed"
+            
+            # Clean up after some time
+            await asyncio.sleep(10)
+            if task_id in background_tasks:
+                del background_tasks[task_id]
+            return
         
         update_progress(10, "Connecting to satellite imagery service...")
         
