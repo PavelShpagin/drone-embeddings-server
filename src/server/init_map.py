@@ -55,10 +55,6 @@ def calculate_patch_gps(patch_center_px: Tuple[int, int],
     lng_range = map_bounds["max_lng"] - map_bounds["min_lng"]
     lat_range = map_bounds["max_lat"] - map_bounds["min_lat"]
     
-    # Prevent division by zero
-    if img_width == 0 or img_height == 0:
-        raise ValueError(f"Invalid image dimensions: width={img_width}, height={img_height}")
-    
     # X maps to longitude, Y maps to latitude (reversed)
     lng = map_bounds["min_lng"] + (x_px / img_width) * lng_range
     lat = map_bounds["max_lat"] - (y_px / img_height) * lat_range
@@ -121,8 +117,6 @@ def crop_to_meters(image: np.ndarray, target_meters: int,
     h, w = image.shape[:2]
     
     # Calculate crop ratio
-    if original_coverage_m <= 0:
-        raise ValueError(f"Invalid original coverage: {original_coverage_m}")
     crop_ratio = target_meters / original_coverage_m
     
     # Calculate new dimensions
@@ -228,8 +222,6 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
         # Calculate patch size for 100m x 100m coverage
         # After cropping, pixels per meter changes
         h, w = full_image.shape[:2]
-        if meters <= 0:
-            raise ValueError(f"Invalid meters value: {meters}")
         pixels_per_meter = min(h, w) / meters
         patch_size_px = int(100 * pixels_per_meter)  # 100m in pixels
         patch_size_px = max(10, min(patch_size_px, min(h, w) // 2))  # Reasonable bounds
@@ -334,12 +326,8 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
                 # Save map as PNG
                 if full_image.dtype != np.uint8:
                     # Normalize to 0-255 if needed
-                    img_min, img_max = full_image.min(), full_image.max()
-                    if img_max - img_min == 0:
-                        # Handle constant image (all pixels same value)
-                        map_array = np.full_like(full_image, 128, dtype=np.uint8)
-                    else:
-                        map_array = ((full_image - img_min) / (img_max - img_min) * 255).astype(np.uint8)
+                    map_array = ((full_image - full_image.min()) / 
+                               (full_image.max() - full_image.min()) * 255).astype(np.uint8)
                 else:
                     map_array = full_image
                 

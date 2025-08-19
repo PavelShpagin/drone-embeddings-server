@@ -240,7 +240,8 @@ async def http_init_map(
                 lat=lat,
                 lng=lng,
                 meters=meters,
-                session_id=session_id
+                session_id=session_id,
+                fetch_only=fetch_only
             )
             
             return AsyncInitResponse(task_id=task_id)
@@ -359,6 +360,18 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
                 if task_id in background_tasks:
                     del background_tasks[task_id]
                 return
+        
+        # If fetch_only and session not found, return error
+        if fetch_only:
+            update_progress(0, f"Session {session_id} not found")
+            task.status = "completed"
+            task.error = f"Session {session_id} not found"
+            
+            # Clean up after some time
+            await asyncio.sleep(3)
+            if task_id in background_tasks:
+                del background_tasks[task_id]
+            return
         
         update_progress(10, "Connecting to satellite imagery service...")
         
