@@ -361,7 +361,10 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
         # If we got a cached session successfully
         if initial_result.get("cached"):
             update_progress(30, "Found cached session, loading data...")
+            await asyncio.sleep(1)  # Allow time for device to start polling
+            
             update_progress(80, "Processing cached data...")
+            await asyncio.sleep(1)
             
             # Convert zip_data to base64 for JSON response
             if "zip_data" in initial_result:
@@ -372,8 +375,8 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
             update_progress(100, "Cached data ready!")
             task.status = "completed"
             
-            # Clean up after some time
-            await asyncio.sleep(10)
+            # Keep task available for polling longer
+            await asyncio.sleep(30)  # Increased delay to ensure device can fetch
             if task_id in background_tasks:
                 del background_tasks[task_id]
             return
