@@ -70,6 +70,7 @@ class ProgressTask:
         self.session_id = None
         self.error = None
         self.created_at = time.time()
+        self.last_polled_at = self.created_at
         
 class ProgressResponse(BaseModel):
     status: str
@@ -269,15 +270,7 @@ async def http_init_map(
                 headers={"Content-Disposition": f"attachment; filename=session_{result['session_id']}.zip"}
             )
         # Optionally return compressed payload for device mode
-        elif request.mode == "device" and request.compressed:
-            from fastapi.responses import Response
-            import gzip
-            import json
-            payload = json.dumps(result).encode('utf-8')
-            compressed = gzip.compress(payload, compresslevel=5)
-            return Response(content=compressed, media_type="application/json", headers={
-                "Content-Encoding": "gzip"
-            })
+        # Remove invalid request branch (no request object here)
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail={
@@ -295,6 +288,8 @@ async def get_progress(task_id: str):
             "success": False,
             "error": "Task not found"
         })
+    # Mark as polled now to delay cleanup
+    task.last_polled_at = time.time()
     
     return ProgressResponse(
         status=task.status,
@@ -492,10 +487,25 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
         task.message = f"Error: {str(e)}"
         print(f"Error in background task {task_id}: {e}")
     
-    # Clean up after some time
-    await asyncio.sleep(10)
-    if task_id in background_tasks:
-        del background_tasks[task_id]
+    # Retain task for a bit longer to avoid 404s while device polls immediately after completion
+    # Wait up to 60 seconds since last poll before deleting
+    try:
+        for _ in range(60):
+            await asyncio.sleep(1)
+            t = background_tasks.get(task_id)
+            if not t:
+                break
+            # If polled within the last 5 seconds, extend retention
+            if time.time() - (t.last_polled_at or t.created_at) < 5:
+                continue
+            # If not polled recently and task completed/failed, allow deletion
+            if t.status in ("completed", "failed", "cancelled"):
+                break
+        if task_id in background_tasks:
+            del background_tasks[task_id]
+    except Exception:
+        if task_id in background_tasks:
+            del background_tasks[task_id]
 
 
 @app.get("/sessions", response_model=SessionsResponse)
