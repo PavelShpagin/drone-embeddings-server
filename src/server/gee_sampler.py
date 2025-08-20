@@ -149,7 +149,8 @@ class GEESampler:
                     if progress_callback:
                         frac = completed / float(total)
                         prog = progress_start + frac * (progress_end - progress_start)
-                        progress_callback(round(prog, 2), f"Downloading tiles ({completed}/{total})...")
+                        percent = int(round(frac * 100))
+                        progress_callback(round(prog, 2), f"Downloading tiles ({completed}/{total}) ==> ({percent}% done)")
                 except Exception as e:
                     tile_idx = future_to_idx[future]
                     print(f"   Parallel tile {tile_idx + 1} failed: {e}")

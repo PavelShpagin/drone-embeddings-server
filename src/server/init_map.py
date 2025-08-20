@@ -257,14 +257,16 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
                 )
                 
                 if should_update:
-                    progress_callback(f"Generating embeddings ({i+1}/{total_patches})...", round(current_progress, 2))
+                    pct = int(round(((i + 1) / float(total_patches)) * 100))
+                    progress_callback(f"Generating embeddings ({i+1}/{total_patches}) ==> ({pct}% done)", round(current_progress, 2))
                     last_progress_reported = current_progress
                     print(f"🔄 Tile {i+1}/{total_patches} completed - {current_progress}%")
                 
                 # Always send tile completion update (even if progress % didn't change)
                 elif progress_callback:
                     # Send tile completion without changing overall progress
-                    progress_callback(f"Processing tile {i+1}/{total_patches}...", current_progress)
+                    pct = int(round(((i + 1) / float(total_patches)) * 100))
+                    progress_callback(f"Processing tile {i+1}/{total_patches} ==> ({pct}% done)", current_progress)
                     print(f"⚙️ Processing tile {i+1}/{total_patches}...")
             
             # Generate representation dict from embedder
@@ -286,7 +288,9 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
                 patch_coords=coords
             ))
             
-            if (i + 1) % 50 == 0:
+            if (i + 1) % 50 == 0 and progress_callback:
+                pct = int(round(((i + 1) / float(total_patches)) * 100))
+                progress_callback(f"Processed {i + 1}/{total_patches} patches ==> ({pct}% done)", min(95.0, round(55.0 + ((i + 1)/float(total_patches))*40.0, 2)))
                 print(f"  Processed {i + 1}/{len(patch_data)} patches")
         
         # Create session data

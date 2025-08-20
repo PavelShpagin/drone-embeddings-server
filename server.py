@@ -313,7 +313,7 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
         task.message = message
         print(f"Task {task_id}: {progress}% - {message}")
         
-        # Prepare data once
+        # Prepare basic progress data
         progress_payload = {
             "type": "progress_update",
             "task_id": task_id,
@@ -321,6 +321,12 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
             "progress": float(progress),
             "message": message
         }
+        
+        # Include zip_data and session_id if task is completed and has data
+        if task.status == "completed" and hasattr(task, 'zip_data') and task.zip_data:
+            progress_payload["zip_data"] = task.zip_data
+            progress_payload["session_id"] = getattr(task, 'session_id', task_id)
+            print(f"📦 Including zip_data in completion message for {task_id}")
         
         # Ensure WS send happens on the event loop thread even when called from worker threads
         def _send():
@@ -367,8 +373,8 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
                 task.zip_data = base64.b64encode(initial_result["zip_data"]).decode('utf-8')
                 task.session_id = initial_result["session_id"]
             
-            update_progress(100, "Cached data ready!")
             task.status = "completed"
+            update_progress(100, "Cached data ready!")
             
             # Keep task available for polling longer
             await asyncio.sleep(30)  # Increased delay to ensure device can fetch
@@ -474,8 +480,8 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
                 task.zip_data = base64.b64encode(result["zip_data"]).decode('utf-8')
                 task.session_id = result["session_id"]
             
-            update_progress(100, "Map data ready!")
             task.status = "completed"
+            update_progress(100, "Map data ready!")
         else:
             task.status = "failed"
             task.error = result.get("error", "Unknown error")
