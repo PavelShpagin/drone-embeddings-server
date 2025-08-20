@@ -126,7 +126,30 @@ class SatelliteEmbeddingServer:
         if mode == "device":
             # Return zip file for device mode
             try:
-                with open(session_meta.zip_path, 'rb') as f:
+                zip_path = session_meta.zip_path
+                # If zip_path is missing or file not present, reconstruct it on the fly
+                if not zip_path or not Path(zip_path).exists():
+                    map_path = Path(session_meta.map_path)
+                    embeddings_path = Path(session_meta.embeddings_path)
+                    if map_path.exists() and embeddings_path.exists():
+                        # Build a new zip
+                        self.zips_dir.mkdir(parents=True, exist_ok=True)
+                        zip_path_obj = self.zips_dir / f"{session_id}.zip"
+                        import io, json
+                        with zipfile.ZipFile(zip_path_obj, 'w', zipfile.ZIP_DEFLATED) as zf:
+                            # Add map.png
+                            with open(map_path, 'rb') as f:
+                                zf.writestr('map.png', f.read())
+                            # Add embeddings.json
+                            with open(embeddings_path, 'rb') as f:
+                                zf.writestr('embeddings.json', f.read())
+                        # Update metadata and persist
+                        session_meta.zip_path = str(zip_path_obj)
+                        self.sessions[session_id] = session_meta
+                        self._save_sessions()
+                        zip_path = session_meta.zip_path
+                # Read zip
+                with open(zip_path, 'rb') as f:
                     zip_data = f.read()
                 return {
                     "session_id": session_id,

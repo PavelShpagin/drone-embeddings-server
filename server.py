@@ -15,7 +15,7 @@ import time
 import uuid
 import asyncio
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Set
 
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form, BackgroundTasks, WebSocket, WebSocketDisconnect
 import uvicorn
@@ -91,11 +91,16 @@ server = SatelliteEmbeddingServer()
 # Global background tasks storage
 background_tasks: Dict[str, ProgressTask] = {}
 
+# Custom exception for cooperative cancellation in worker threads
+class OperationCancelled(Exception):
+    pass
+
 # WebSocket connection management
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
         self.task_connections: Dict[str, str] = {}  # task_id -> connection_id mapping
+        self.cancelled_connections: Set[str] = set()
     
     async def connect(self, websocket: WebSocket, connection_id: str):
         await websocket.accept()
@@ -115,6 +120,11 @@ class ConnectionManager:
         """Register a task with a WebSocket connection."""
         self.task_connections[task_id] = connection_id
         print(f"📋 Task {task_id} registered with connection {connection_id}")
+        # If this connection was previously cancelled, immediately cancel this task too
+        if connection_id in self.cancelled_connections and task_id in background_tasks:
+            t = background_tasks[task_id]
+            t.status = "cancelled"
+            t.message = "Task cancelled by client"
     
     async def send_progress(self, task_id: str, progress_data: dict):
         """Send progress update to the WebSocket connection for this task."""
@@ -184,6 +194,21 @@ async def websocket_endpoint(websocket: WebSocket, connection_id: str):
                             }))
                             
                             print(f"🚫 Task {task_id} cancelled via WebSocket")
+                    elif message_type == "cancel_all":
+                        # Cancel all tasks registered to this connection
+                        self.cancelled_connections.add(connection_id)
+                        cancelled_any = False
+                        for tid, conn_id in list(manager.task_connections.items()):
+                            if conn_id == connection_id and tid in background_tasks:
+                                t = background_tasks[tid]
+                                t.status = "cancelled"
+                                t.message = "Task cancelled by client"
+                                cancelled_any = True
+                        await websocket.send_text(json.dumps({
+                            "type": "connection_cancelled",
+                            "connection_id": connection_id,
+                            "cancelled": cancelled_any
+                        }))
                     
                     elif message_type == "register_task":
                         # Register task with this connection
@@ -401,26 +426,38 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
         
         def progress_wrapper(message, progress):
             """Wrapper to make progress callback async-compatible."""
+            # Cooperative cancellation: abort as soon as server marks task cancelled
+            if task.status == "cancelled":
+                print(f"Cancellation detected for task {task_id}; aborting work")
+                raise OperationCancelled()
             print(f"PROGRESS WRAPPER CALLED: {progress}% - {message}")
             update_progress(progress, message)
-            # Force immediate update to task object
             task.progress = progress
             task.message = message
         
         # Run heavy synchronous processing in a worker thread so event loop can deliver WS updates
         def _run_processing():
-            return process_init_map_request(
-                lat=lat,
-                lng=lng, 
-                meters=meters,
-                mode="device",
-                embedder=server.embedder,
-                sessions=temp_sessions,
-                save_sessions_callback=lambda: None,
-                progress_callback=progress_wrapper
-            )
+            try:
+                return process_init_map_request(
+                    lat=lat,
+                    lng=lng, 
+                    meters=meters,
+                    mode="device",
+                    embedder=server.embedder,
+                    sessions=temp_sessions,
+                    save_sessions_callback=lambda: None,
+                    progress_callback=progress_wrapper
+                )
+            except OperationCancelled:
+                return {"success": False, "cancelled": True}
         result = await loop.run_in_executor(None, _run_processing)
         
+        # If cancelled during processing, stop early
+        if (isinstance(result, dict) and result.get("cancelled")) or task.status == "cancelled":
+            task.status = "cancelled"
+            update_progress(task.progress or 0, "Cancelled")
+            return
+
         # Store session data in server
         if result.get("success"):
             session_id = result["session_id"]
