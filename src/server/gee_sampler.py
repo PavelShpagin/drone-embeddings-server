@@ -67,7 +67,7 @@ class GEESampler:
             'dimensions': f'{tile_size}x{tile_size}',
             'format': 'png'
         })
-        response = requests.get(url, timeout=60)
+        response = requests.get(url, timeout=300)  # 5 minutes for satellite image download
         response.raise_for_status()
         return Image.open(BytesIO(response.content))
     

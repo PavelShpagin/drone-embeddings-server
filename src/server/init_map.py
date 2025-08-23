@@ -243,6 +243,17 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
         last_progress_reported = 55.0
         
         for i, (patch_array, coords) in enumerate(patch_data):
+            # STRICT CANCELLATION CHECK: Check on EVERY tile, not just progress updates
+            if progress_callback:
+                try:
+                    # This will trigger OperationCancelled if task was cancelled
+                    progress_callback("", 0)  # Empty call just to trigger cancellation check
+                except Exception as e:
+                    # If cancellation was detected, abort immediately
+                    if "Cancellation detected" in str(e) or "OperationCancelled" in str(type(e).__name__):
+                        print(f"🚫 STRICT CANCELLATION: Aborting tile {i+1}/{total_patches} immediately")
+                        raise e
+            
             # Update progress during embedding generation (every tile + every 1%)
             if progress_callback and total_patches > 0:
                 # Progress from 55% to 95% during embedding generation (40% range)

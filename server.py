@@ -186,8 +186,8 @@ async def websocket_endpoint(websocket: WebSocket, connection_id: str):
         # Keep connection alive and listen for client messages
         while True:
             try:
-                # Wait for client messages (cancellation, etc.)
-                message = await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
+                # Wait for client messages (cancellation, etc.) - no timeout for long operations
+                message = await asyncio.wait_for(websocket.receive_text(), timeout=300.0)  # 5 minutes instead of 1 second
                 try:
                     data = json.loads(message)
                     message_type = data.get("type")
@@ -761,6 +761,36 @@ async def http_logs_summary(session_id: str):
             "success": False,
             "error": str(e)
         })
+
+
+@app.post("/cancel_task")
+async def cancel_task(task_id: str = Form(...), connection_id: Optional[str] = Form(None)):
+    """FORCEFULLY cancel a background task with immediate termination."""
+    try:
+        if task_id in background_tasks:
+            task = background_tasks[task_id]
+            
+            # STRICT CANCELLATION: Mark as cancelled immediately
+            task.status = "cancelled"
+            task.message = "Task forcefully cancelled by client request"
+            print(f"🚫 FORCEFUL CANCELLATION: Task {task_id} marked for immediate termination")
+            
+            # If connection_id provided, also simulate disconnect for that connection
+            if connection_id:
+                manager.disconnect(connection_id)
+                print(f"🔌 Simulated disconnect for connection {connection_id}")
+            
+            # Force immediate cleanup - don't wait for graceful completion
+            task.progress = 0
+            task.message = "Cancelled"
+            print(f"⚡ Task {task_id} status updated for immediate abort")
+            
+            return {"success": True, "message": f"Task {task_id} forcefully cancelled"}
+        else:
+            return {"success": False, "message": f"Task {task_id} not found"}
+            
+    except Exception as e:
+        return {"success": False, "message": f"Error cancelling task: {e}"}
 
 
 def run_server(host='0.0.0.0', port=5000, debug=False):
