@@ -110,11 +110,25 @@ class ConnectionManager:
     def disconnect(self, connection_id: str):
         if connection_id in self.active_connections:
             del self.active_connections[connection_id]
-        # Remove from task mapping
+        
+        # Cancel all tasks associated with this connection
+        cancelled_tasks = []
         for task_id, conn_id in list(self.task_connections.items()):
             if conn_id == connection_id:
+                # Cancel the background task
+                if task_id in background_tasks:
+                    task = background_tasks[task_id]
+                    task.status = "cancelled"
+                    task.message = "Connection lost - task cancelled"
+                    cancelled_tasks.append(task_id)
+                    print(f"🚫 Cancelled task {task_id} due to connection loss")
+                # Remove from task mapping
                 del self.task_connections[task_id]
-        print(f"✗ WebSocket disconnected: {connection_id}")
+        
+        if cancelled_tasks:
+            print(f"✗ WebSocket disconnected: {connection_id} (cancelled {len(cancelled_tasks)} tasks)")
+        else:
+            print(f"✗ WebSocket disconnected: {connection_id}")
     
     def register_task(self, task_id: str, connection_id: str):
         """Register a task with a WebSocket connection."""
