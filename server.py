@@ -273,6 +273,9 @@ async def http_init_map(
             task = ProgressTask(task_id)
             background_tasks[task_id] = task
             
+            # Mark as HTTP polling mode for immediate progress forwarding
+            task.http_polling_mode = True
+            
             # Register task with WebSocket connection if provided
             if connection_id:
                 manager.register_task(task_id, connection_id)
@@ -351,6 +354,25 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
         task.progress = float(progress)
         task.message = message
         print(f"Task {task_id}: {progress}% - {message}")
+        
+        # For HTTP polling clients: forward progress immediately to device UI
+        # This ensures tile completion messages don't get lost
+        try:
+            # Check if this task is being polled via HTTP (not WebSocket)
+            if hasattr(task, 'http_polling_mode') and task.http_polling_mode:
+                device_progress_update = {
+                    "status": task.status,
+                    "progress": float(progress),
+                    "message": message,
+                    "timer": None
+                }
+                # Forward to device UI immediately (don't wait for polling)
+                import requests
+                device_response = requests.post("http://localhost:8888/api/update_progress", 
+                            json=device_progress_update, timeout=5)
+                print(f"📱 Forwarded to device UI: {device_response.status_code} - {message}")
+        except Exception as e:
+            print(f"❌ Device forwarding failed: {e}")
         
         # Prepare basic progress data
         progress_payload = {
