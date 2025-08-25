@@ -224,6 +224,43 @@ async def websocket_endpoint(websocket: WebSocket, connection_id: str):
                             "cancelled": cancelled_any
                         }))
                     
+                    elif message_type == "init_map":
+                        # Handle init_map request via WebSocket
+                        print(f"📡 Received init_map request via WebSocket from {connection_id}")
+                        
+                        # Extract parameters from WebSocket message
+                        lat = float(data.get("lat"))
+                        lng = float(data.get("lng"))
+                        meters = int(data.get("meters"))
+                        session_id = data.get("session_id", "default")
+                        fetch_only = data.get("fetch_only", False)
+                        
+                        # Create task
+                        task_id = str(uuid.uuid4())
+                        task = ProgressTask(task_id)
+                        background_tasks[task_id] = task
+                        
+                        # Register task with this WebSocket connection
+                        manager.register_task(task_id, connection_id)
+                        
+                        # Send task started confirmation
+                        await websocket.send_text(json.dumps({
+                            "type": "task_started",
+                            "task_id": task_id,
+                            "message": "Map initialization started"
+                        }))
+                        
+                        # Start background processing
+                        background_tasks_runner.add_task(
+                            _process_init_map_async,
+                            task_id=task_id,
+                            lat=lat,
+                            lng=lng,
+                            meters=meters,
+                            session_id=session_id,
+                            fetch_only=fetch_only
+                        )
+                        
                     elif message_type == "register_task":
                         # Register task with this connection
                         task_id = data.get("task_id")
@@ -250,71 +287,7 @@ async def websocket_endpoint(websocket: WebSocket, connection_id: str):
         manager.disconnect(connection_id)
 
 
-@app.post("/init_map")
-async def http_init_map(
-    lat: float = Form(...),
-    lng: float = Form(...),
-    meters: int = Form(2000),
-    mode: str = Form("server"),
-    session_id: Optional[str] = Form(None),
-    connection_id: Optional[str] = Form(None),
-    fetch_only: bool = Form(False),
-    background_tasks_runner: BackgroundTasks = BackgroundTasks()
-):
-    """HTTP endpoint for initializing map sessions."""
-    try:
-        # Convert empty session_id to None
-        if session_id == "":
-            session_id = None
-            
-        # WebSocket-only mode: require connection_id for real-time communication
-        if connection_id:
-            task_id = str(uuid.uuid4())
-            task = ProgressTask(task_id)
-            background_tasks[task_id] = task
-            
-            # Register task with WebSocket connection (required for WebSocket mode)
-            manager.register_task(task_id, connection_id)
-            
-            # Start background processing with WebSocket updates
-            background_tasks_runner.add_task(
-                _process_init_map_async,
-                task_id=task_id,
-                lat=lat,
-                lng=lng,
-                meters=meters,
-                session_id=session_id,
-                fetch_only=fetch_only
-            )
-            
-            return AsyncInitResponse(task_id=task_id)
-        
-        # Handle regular modes (server, device)
-        result = server.init_map(
-            lat=lat,
-            lng=lng,
-            meters=meters,
-            mode=mode,
-            session_id=session_id,
-            fetch_only=fetch_only
-        )
-        
-        # Handle zip_data response for device mode
-        if mode == "device" and "zip_data" in result:
-            from fastapi.responses import Response
-            return Response(
-                content=result["zip_data"], 
-                media_type="application/zip",
-                headers={"Content-Disposition": f"attachment; filename=session_{result['session_id']}.zip"}
-            )
-        # Optionally return compressed payload for device mode
-        # Remove invalid request branch (no request object here)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=400, detail={
-            "success": False,
-            "error": str(e)
-        })
+# HTTP init_map endpoint removed - using pure WebSocket communication only
 
 
 # HTTP progress polling removed - using pure WebSocket communication only
