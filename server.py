@@ -232,7 +232,8 @@ async def websocket_endpoint(websocket: WebSocket, connection_id: str):
                         lat = float(data.get("lat"))
                         lng = float(data.get("lng"))
                         meters = int(data.get("meters"))
-                        session_id = data.get("session_id", "default")
+                        # Use None when no session_id is provided so a new session is created
+                        session_id = data.get("session_id") or None
                         fetch_only = data.get("fetch_only", False)
                         
                         # Create task
