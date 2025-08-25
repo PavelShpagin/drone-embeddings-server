@@ -250,15 +250,16 @@ async def websocket_endpoint(websocket: WebSocket, connection_id: str):
                             "message": "Map initialization started"
                         }))
                         
-                        # Start background processing
-                        background_tasks_runner.add_task(
-                            _process_init_map_async,
-                            task_id=task_id,
-                            lat=lat,
-                            lng=lng,
-                            meters=meters,
-                            session_id=session_id,
-                            fetch_only=fetch_only
+                        # Start background processing on the event loop
+                        asyncio.create_task(
+                            _process_init_map_async(
+                                task_id=task_id,
+                                lat=lat,
+                                lng=lng,
+                                meters=meters,
+                                session_id=session_id,
+                                fetch_only=fetch_only
+                            )
                         )
                         
                     elif message_type == "register_task":
@@ -386,8 +387,8 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
         update_progress(45, "Generating embeddings...")
         
         # Call the actual processing with progress callback
-        from server.init_map import process_init_map_request
-        from general.models import SessionMetadata
+        from src.server.init_map import process_init_map_request
+        from src.general.models import SessionMetadata
         import json
         temp_sessions = {}
         
