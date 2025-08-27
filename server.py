@@ -183,11 +183,11 @@ async def websocket_endpoint(websocket: WebSocket, connection_id: str):
             "message": "WebSocket connected successfully"
         }))
         
-        # Keep connection alive and listen for client messages
+        # Keep connection alive and listen for client messages - NO TIMEOUT for long operations
         while True:
             try:
-                # Wait for client messages (cancellation, etc.) - no timeout for long operations
-                message = await asyncio.wait_for(websocket.receive_text(), timeout=300.0)  # 5 minutes instead of 1 second
+                # Wait for client messages (cancellation, init_map requests, etc.) - NO TIMEOUT
+                message = await websocket.receive_text()  # Remove timeout completely for long operations
                 try:
                     data = json.loads(message)
                     message_type = data.get("type")
@@ -302,18 +302,57 @@ async def _process_init_map_async(task_id: str, lat: float, lng: float, meters: 
     loop = asyncio.get_running_loop()
 
     def update_progress(progress: float, message: str):
-        """Update task progress and send WebSocket notification."""
+        """Update task progress and send structured WebSocket notification."""
         task.progress = float(progress)
         task.message = message
         print(f"Task {task_id}: {progress}% - {message}")
         
-        # Prepare progress data for WebSocket transmission
+        # Parse message to extract structured data
+        phase = "unknown"
+        tiles_completed = 0
+        total_tiles = 0
+        embeddings_processed = 0
+        total_embeddings = 0
+        
+        # Extract structured data from message
+        if "connection" in message.lower() or "connecting" in message.lower():
+            phase = "connecting"
+        elif "downloading" in message.lower() and "tiles" in message.lower():
+            phase = "downloading"
+            # Extract tiles info: "Downloading tiles (k/m)"
+            import re
+            tiles_match = re.search(r'tiles \((\d+)/(\d+)\)', message)
+            if tiles_match:
+                tiles_completed = int(tiles_match.group(1))
+                total_tiles = int(tiles_match.group(2))
+        elif "generating embeddings" in message.lower() or "processing tile" in message.lower():
+            phase = "embedding_generation"
+            # Extract embedding info: "Generating embeddings (k/m)"
+            import re
+            embed_match = re.search(r'embeddings \((\d+)/(\d+)\)', message)
+            if embed_match:
+                embeddings_processed = int(embed_match.group(1))
+                total_embeddings = int(embed_match.group(2))
+            # Also extract tile info
+            tile_match = re.search(r'tile (\d+)/(\d+)', message)
+            if tile_match:
+                tiles_completed = int(tile_match.group(1))
+                total_tiles = int(tile_match.group(2))
+        elif "finaliz" in message.lower() or "complet" in message.lower():
+            phase = "finalizing"
+        
+        # Prepare structured progress data for WebSocket transmission
         progress_payload = {
             "type": "progress_update",
             "task_id": task_id,
             "status": task.status,
             "progress": float(progress),
-            "message": message
+            "message": message,
+            "phase": phase,
+            "tiles_completed": tiles_completed,
+            "total_tiles": total_tiles,
+            "embeddings_processed": embeddings_processed,
+            "total_embeddings": total_embeddings
         }
         
         # Include zip_data and session_id if task is completed and has data
