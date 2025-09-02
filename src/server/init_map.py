@@ -171,7 +171,7 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
                 lng=lng,
                 grid_size=(grid_rows, grid_cols),
                 patch_pixels=(128, 128),  # High resolution patches
-                progress_callback=(lambda p, m: progress_callback(m, p) if progress_callback else None),
+                progress_callback=progress_callback,
                 progress_start=5.0,   # Prepare/tiles start
                 progress_end=40.0,    # Tiles done
             )
@@ -254,31 +254,30 @@ def process_init_map_request(lat: float, lng: float, meters: int, mode: str,
                         print(f"🚫 STRICT CANCELLATION: Aborting tile {i+1}/{total_patches} immediately")
                         raise e
             
-            # Update progress during embedding generation (every tile + every 1%)
+            # Update progress during embedding generation (EVERY SINGLE TILE for smooth progress)
             if progress_callback and total_patches > 0:
                 # Progress from 55% to 95% during embedding generation (40% range)
                 progress_ratio = (i + 1) / float(total_patches)
                 current_progress = 55.0 + (progress_ratio * 40.0)
                 
-                # Update on every tile completion OR every 1% progress change
-                should_update = (
-                    current_progress - last_progress_reported >= 1.0 or       # Every 1% change
-                    i == 0 or                                          # First patch
-                    i == total_patches - 1                            # Last patch
+                # Update on EVERY tile completion for maximum smoothness
+                pct = int(round(((i + 1) / float(total_patches)) * 100))
+                progress_callback(f"Generating AI embeddings...", round(current_progress, 2))
+                
+                # Send detailed milestone updates every 10 tiles or every 5% progress
+                should_send_detailed = (
+                    (i + 1) % 10 == 0 or                                    # Every 10 tiles
+                    current_progress - last_progress_reported >= 5.0 or     # Every 5% change
+                    i == 0 or                                               # First patch
+                    i == total_patches - 1                                  # Last patch
                 )
                 
-                if should_update:
-                    pct = int(round(((i + 1) / float(total_patches)) * 100))
-                    progress_callback(f"Generating embeddings ({i+1}/{total_patches}) ==> ({pct}% done)", round(current_progress, 2))
+                if should_send_detailed:
+                    progress_callback(f"Processing... ({pct}% done)", round(current_progress, 2))
                     last_progress_reported = current_progress
-                    print(f"🔄 Tile {i+1}/{total_patches} completed - {current_progress}%")
-                
-                # Always send tile completion update (even if progress % didn't change)
-                elif progress_callback:
-                    # Send tile completion without changing overall progress
-                    pct = int(round(((i + 1) / float(total_patches)) * 100))
-                    progress_callback(f"Processing tile {i+1}/{total_patches} ==> ({pct}% done)", current_progress)
-                    print(f"⚙️ Processing tile {i+1}/{total_patches}...")
+                    print(f"🔄 Milestone: {i+1}/{total_patches} patches completed - {current_progress:.1f}%")
+                else:
+                    print(f"⚙️ Processing patch {i+1}/{total_patches}...")
             
             # Generate representation dict from embedder
             rep = embedder.embed_patch(patch_array)

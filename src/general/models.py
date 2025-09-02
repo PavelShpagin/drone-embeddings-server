@@ -44,6 +44,10 @@ class SessionMetadata:
     map_path: str  # Path to satellite image PNG
     embeddings_path: str  # Path to embeddings JSON
     zip_path: str  # Path to packaged zip file
+    # Optional geospatial/session parameters for cached retrieval
+    lat: float | None = None
+    lng: float | None = None
+    km: float | None = None
 
 @dataclass
 class SessionData:

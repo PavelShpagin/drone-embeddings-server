@@ -150,7 +150,11 @@ class GEESampler:
                         frac = completed / float(total)
                         prog = progress_start + frac * (progress_end - progress_start)
                         percent = int(round(frac * 100))
-                        progress_callback(round(prog, 2), f"Downloading tiles ({completed}/{total}) ==> ({percent}% done)")
+                        # Send smooth progress update for every tile completion
+                        progress_callback(round(prog, 2), f"Downloading satellite imagery...")
+                        # Send detailed milestone every 5 tiles or at key points
+                        if completed % 5 == 0 or completed == 1 or completed == total:
+                            progress_callback(round(prog, 2), f"Downloaded {completed}/{total} tiles ({percent}% done)")
                 except Exception as e:
                     tile_idx = future_to_idx[future]
                     print(f"   Parallel tile {tile_idx + 1} failed: {e}")
@@ -204,7 +208,7 @@ class GEESampler:
         lng: float,
         grid_size: Tuple[int, int] = (4, 4),
         patch_pixels: Tuple[int, int] = (128, 128),
-        progress_callback: Optional[Callable[[float, str], None]] = None,
+        progress_callback: Optional[Callable[[str, float], None]] = None,
         progress_start: float = 10.0,
         progress_end: float = 30.0,
     ) -> Image.Image:
@@ -329,12 +333,14 @@ def sample_satellite_image(
         PIL Image object
     """
     sampler = GEESampler()
+    # Adapter: GEESampler.sample_image uses (message, progress)
+    adapted_cb = (lambda m, p: progress_callback(p, m)) if progress_callback else None
     return sampler.sample_image(
         lat,
         lng,
         grid_size,
         patch_pixels,
-        progress_callback=progress_callback,
+        progress_callback=adapted_cb,
         progress_start=progress_start,
         progress_end=progress_end,
     )

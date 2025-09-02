@@ -15,8 +15,8 @@ import time
 import numpy as np
 from PIL import Image
 from general.models import SessionMetadata, SessionData, PathPoint
-from server.embedder import TinyDINOEmbedder
-from server.init_map import process_init_map_request
+from src.server.embedder import TinyDINOEmbedder
+from src.server.init_map import process_init_map_request
 from general.fetch_gps import process_fetch_gps_request
 from general.image_metadata import extract_metadata
 import time
@@ -80,7 +80,7 @@ class SatelliteEmbeddingServer:
         """Public method to save sessions to persistent storage."""
         self._save_sessions()
     
-    def init_map(self, lat: float, lng: float, meters: int = 2000, mode: str = "server", session_id: Optional[str] = None, fetch_only: bool = False):
+    def init_map(self, lat: float, lng: float, meters: int = 2000, mode: str = "server", session_id: Optional[str] = None, fetch_only: bool = False, progress_callback=None):
         """
         Initialize a new map session or return cached session.
         
@@ -117,7 +117,7 @@ class SatelliteEmbeddingServer:
             }
         
         # No session_id, not fetch_only - create new session
-        return self._create_new_session(lat, lng, meters, mode)
+        return self._create_new_session(lat, lng, meters, mode, progress_callback)
     
     def _return_cached_session(self, session_id: str, mode: str):
         """Return cached session data."""
@@ -172,7 +172,7 @@ class SatelliteEmbeddingServer:
                 "cached": True
             }
     
-    def _create_new_session(self, lat: float, lng: float, meters: int, mode: str):
+    def _create_new_session(self, lat: float, lng: float, meters: int, mode: str, progress_callback=None):
         """Create new session with full processing."""
         # Use existing process_init_map_request for processing
         temp_sessions = {}  # Temporary dict for legacy compatibility
@@ -184,7 +184,7 @@ class SatelliteEmbeddingServer:
             embedder=self.embedder,
             sessions=temp_sessions,
             save_sessions_callback=lambda: None,  # No-op for temp
-            progress_callback=None  # No progress callback for direct calls
+            progress_callback=progress_callback
         )
         
         if not result.get("success"):
@@ -265,7 +265,11 @@ class SatelliteEmbeddingServer:
             created_at=session_data.created_at,
             map_path=str(map_path),
             embeddings_path=str(embeddings_path),
-            zip_path=str(zip_path)
+            zip_path=str(zip_path),
+            # Preserve geospatial inputs for cached retrieval - extract from session_data
+            lat=(session_data.map_bounds["min_lat"] + session_data.map_bounds["max_lat"]) / 2,
+            lng=(session_data.map_bounds["min_lng"] + session_data.map_bounds["max_lng"]) / 2,
+            km=float(session_data.meters_coverage) / 1000.0
         )
 
     def fetch_gps(self, image_data: bytes, session_id: str, logging_id: Optional[str] = None, visualization: bool = False):
